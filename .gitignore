@@ -1,0 +1,122 @@
+# Dependencies and local package caches
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/cache/
+.yarn/unplugged/
+.pnp.*
+
+# Next.js, build outputs, compiler state and caches
+.next/
+out/
+dist/
+build/
+target/
+*.tsbuildinfo
+.turbo/
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+coverage/
+.nyc_output/
+*.lcov
+
+# Secrets and environment overrides; only explicit examples may be tracked
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+credentials*.json
+secrets*.json
+.netrc
+.npmrc.local
+
+# Private local operations, proof, sessions and generated context
+.local/
+.private/
+private/
+.proof/
+.proofs/
+proofs/
+artifacts/
+test-results/
+playwright-report/
+blob-report/
+.auth/
+storage-state*.json
+*.har
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.cortex/
+cortex-context/
+graphify-out/
+.graphify_detect.json
+.graphify_cache/
+context-files/
+full.md
+
+# Operator data, uploads, database volumes, backup/recovery and archives
+data/
+uploads/
+storage/
+volumes/
+backups/
+recovery/
+*.dump
+*.backup
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.age
+*.gpg
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Python/context-tool temporary files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor, platform and temporary files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.tmp
+tmp/
+temp/
+
+# Local container/hosting/agent overrides, never shared credentials/settings
+docker-compose.override.yml
+compose.override.yml
+.vercel/
+.netlify/
+.claude/settings.local.json
+.codex/config.local.toml
+.codex/memories/
+
+# Intentionally tracked: source migrations/Drizzle journals, lockfiles, tests,
+# reviewed screenshots, docs, rules, roles and repo-local skills.
+# This file is not a secret scanner; inspect every staged diff before committing.

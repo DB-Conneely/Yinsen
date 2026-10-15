@@ -1,0 +1,4 @@
+# Project-scoped standalone roles live in .codex/agents/.
+# Inherit the user's model, reasoning, permissions and approval preferences.
+[agents]
+max_concurrent_threads_per_session = 3
