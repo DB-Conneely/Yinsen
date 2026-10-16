@@ -1,0 +1,13 @@
+node_modules
+.next
+coverage
+package-lock.json
+next-env.d.ts
+docs/legacy
+.agents
+.codex
+cortex-context
+graphify-out
+.env*
+.local
+drizzle/meta
