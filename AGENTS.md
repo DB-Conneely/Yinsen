@@ -32,9 +32,20 @@ This ranks evidence, not chronological coding/testing steps; develop and verify 
 - You are not alone in the workspace. Preserve others' work; coordinate shared files. Only orchestrator performs authorised Git mutations under the local GitHub workflow skill. Inspect working tree/index/refs/remotes/branches/tags/stashes/worktrees/reflogs/history first; retain recovery paths and logical commits.
 - No history rewrite, repository identity change or deletion of original history/data/recovery copies without explicit authorization for exact destructive targets after stating the consequences. Never push/merge remote main. No agent deploys in any form; Neels deploys manually through GitHub CI/CD.
 - Use the smallest complete implementation. Do not weaken validation, authorization, error handling, accessibility, tests or functional proof to save time. Do not add unrelated surfaces or conduct an audit of the preserved old implementation.
+- Run heavy builds and checks **one at a time across all agents**. Never overlap Docker image builds with host builds/checks. Wait for each heavy command to exit before starting another; do not leave heavy commands running in the background. PostgreSQL may run as the required database fixture during a host check. This resource rule follows the laptop overload on 16 October 2026.
 
 ## Context and skills are supporting tools
 
 Use the repo-local GitHub workflow, Ponytail, refresh-context and Graphify skills under `.agents/skills/`. Refresh maps after structural changes and before candidate review when stale. Use local code-only Graphify and unlabeled clustering; no billable model calls, global cross-repo graph, hooks or automatic build loop. Maps aid navigation and never establish functionality. Missing/stale maps must be reported and restored, never claimed current.
 
 The foundation contains no application code or configured compiler gates. Phase 1.1 must install and exercise the rule-to-command mapping before product handover. Do not claim that documentation alone has enforced a compiler/linter or verified the future product.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

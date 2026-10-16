@@ -1,6 +1,6 @@
 # Yinsen
 
-Open-source, self-hosted client portal for freelancers and small agencies. **Planning and delivery protocol locked on 15 October 2026. Product implementation has not started.**
+Open-source, self-hosted client portal for freelancers and small agencies. Phase 1 is paused inside unfinished Task 1.1. An initial runnable foundation is committed; its latest startup/packaging changes still need final verification. Operator/client access has not started. See the [current handover](docs/handover.md) before resuming.
 
 Start with [AGENTS.md](AGENTS.md), the [planning index](docs/rebuild/README.md) and [current handover](docs/handover.md). The original client-portal repository remains intact; this is a fresh Git repository with its own history, not a copied implementation or rewritten ancestry.
 
@@ -22,4 +22,10 @@ Verification priority: **functional proof > wired production code > tests and ga
 
 The product is MIT licensed. Installation/usage instructions will be delivered and exercised with the actual application; no legacy quickstart or completion claim is presented as working Yinsen software. Neels may charge for installation as a separate service without adding billing/platform logic to the portal.
 
-No implementation, remote repository publication, push or deployment is authorised by this foundation. Phase 1 begins in a separately authorised build chat using the launch instructions in the handover.
+## Run locally
+
+Follow the [operator guide](docs/operator.md) for Docker Compose, configuration, explicit migrations and source development. The foundation uses Next.js 16.4.2, React 19.3.1, Node.js 22 and PostgreSQL 16.13 with Drizzle. The [engineering gates](docs/as-built/engineering-gates.md) map strict TypeScript, type-aware lint, tests and production build to real commands.
+
+One application process and one persisted PostgreSQL database form the supported foundation. No external provider is needed to start it. See the [current as-built](docs/as-built/system.md) for exact delivered scope and observed proof; a healthy infrastructure response does not establish portal business functionality.
+
+Neels performs deployment manually through GitHub CI/CD. No agent pushes or deploys this project.

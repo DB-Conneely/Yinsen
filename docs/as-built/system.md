@@ -1,5 +1,13 @@
 # Current as-built system
 
-16 October 2026. Phase 1 has begun under explicit authorization. Source baseline: `a798302d63b4b3279b8476bc6ccd2724e5011bfb`. No application functionality is delivered or verified yet.
+16 October 2026. **PAUSED at Neels's request, inside unfinished Task 1.1. Phase 1 is UNVERIFIED. Task 1.2 has not started.** See the [current handover](../handover.md) for the exact restart seam and [Phase 1](phase-01.md) for evidence/source identity and remaining checks.
 
-The Phase 1 orchestrator owns the primary checkout and sequential task delivery. See [Phase 1](phase-01.md) for source identity, ownership, evidence and current limitations. The original repository is preserved and outside this build's scope. No deployment or remote publication is authorized.
+- Source: local `main` at initial foundation increment `7b367dc`, followed by documentation-only pause recording. Latest standalone startup correction and Docker/installation packaging remain dirty/untracked and unverified after the last edits. Do not discard them or accept an older test run as their proof.
+- Implemented foundation: pinned Next/React/TypeScript with Drizzle/PostgreSQL; consumed installation singleton; explicit migration/status commands; separate runtime/migrator privileges; startup configuration/schema check; DB-backed health, safe errors/logging and security headers; installed engineering-gate commands/tests. Actual health/database/privilege observations exist, with limits recorded in Phase 1.
+- Interrupted correction: supported standalone source launcher, current root environment loading, static/output preparation and fatal safe startup failure. Final post-change checks, tools-image commands and restart/persistence proof remain outstanding. Task 1.1 has no final handover/acceptance yet.
+- Resources: both `yinsen_phase1_v2` containers and Docker Desktop were stopped successfully; no host build/test/server or subagent writer was observed remaining. Ignored root `.env` (0600), database volumes, images, source and private evidence are preserved. Existing build output/images are not an accepted current candidate. Maps are present but stale after structural edits.
+- Resource rule: **one heavy build/check at a time across all agents; no Docker/host build overlap or heavy background jobs**. A required PostgreSQL fixture may run during its host test. No heavy checks were performed for pause documentation.
+- Resume Task 1.1 only after Neels says so and the execution host is established. SSH was discussed as a possibility; no remote move/setup was authorized or performed. Do not automatically dispatch Task 1.2.
+- No operator/client access, project, messaging, invoice, storage/provider business path, task audits or QA verdict is delivered yet. Real Resend verification remains a later final Phase 1 prerequisite; independent available work may proceed without that key after resume. No Phase 2 message has been sent.
+
+The original repository/history remains preserved and outside this build's scope. No remote is configured, no push/deployment occurred, and no recovery data was deleted.
