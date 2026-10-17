@@ -21,7 +21,7 @@ export type StoredFile = {
 };
 
 function keyPath(key: string, config: StorageConfiguration): string {
-  if (!/^messages\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/.test(key))
+  if (!/^(messages|deliverables)\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/.test(key))
     throw new AppError(400, "INVALID_FILE", "Invalid file reference.");
   return join(config.path, key);
 }
@@ -155,7 +155,7 @@ export async function getFile(
   }
 }
 
-// Only the failed send's freshly generated keys reach this cleanup caller.
+// Only freshly failed writes or files from a confirmed committed deletion reach this caller.
 export async function removeFailedFiles(files: StoredFile[]): Promise<void> {
   const config = readConfiguration().storage;
   for (const file of files) {
@@ -186,7 +186,7 @@ export async function removeFailedFiles(files: StoredFile[]): Promise<void> {
     } catch {
       logger.error(
         { event: "storage.cleanup_failed", key: file.key, driver: file.driver },
-        "Failed message left a private orphan; operator cleanup required",
+        "File cleanup failed; private orphan retained for operator recovery",
       );
     }
   }

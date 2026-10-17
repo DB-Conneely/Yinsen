@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   bigserial,
   bigint,
+  foreignKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { ProposalTerms } from "../messages/proposal-validators";
@@ -362,5 +363,53 @@ export const messageReads = pgTable(
       "message_reader_type",
       sql`${table.actorType} in ('operator','client')`,
     ),
+  ],
+);
+
+export const deliverables = pgTable(
+  "deliverables",
+  {
+    id: uuid().primaryKey(),
+    milestoneId: uuid("milestone_id")
+      .notNull()
+      .references(() => milestones.id, { onDelete: "cascade" }),
+    parentDeliverableId: uuid("parent_deliverable_id"),
+    version: integer().notNull(),
+    filename: text().notNull(),
+    key: text("storage_key").notNull().unique(),
+    driver: text().$type<"local" | "s3">().notNull(),
+    size: bigint({ mode: "number" }).notNull(),
+    mimeType: text("mime_type").notNull(),
+    sha256: text().notNull(),
+    fingerprint: text().notNull(),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => operator.id),
+    released: boolean().notNull().default(false),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("deliverables_id_milestone").on(table.id, table.milestoneId),
+    foreignKey({
+      columns: [table.parentDeliverableId, table.milestoneId],
+      foreignColumns: [table.id, table.milestoneId],
+      name: "deliverables_parent_milestone_fk",
+    }),
+    uniqueIndex("deliverables_chain_version").on(
+      sql`coalesce(${table.parentDeliverableId},${table.id})`,
+      table.version,
+    ),
+    index("deliverables_milestone").on(table.milestoneId),
+    check(
+      "deliverables_lineage",
+      sql`(${table.parentDeliverableId} is null and ${table.version}=1) or (${table.parentDeliverableId} is not null and ${table.parentDeliverableId}<>${table.id} and ${table.version}>1)`,
+    ),
+    check(
+      "deliverables_size",
+      sql`${table.size}>0 and ${table.size}<=104857600`,
+    ),
+    check("deliverables_driver", sql`${table.driver} in ('local','s3')`),
   ],
 );

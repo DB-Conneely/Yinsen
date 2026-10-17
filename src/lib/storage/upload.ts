@@ -22,6 +22,12 @@ export type MessageUpload = {
   files: Upload[];
   cleanup: () => Promise<void>;
 };
+export type DeliverableUpload = {
+  requestId: string;
+  parentDeliverableId: string | null;
+  files: Upload[];
+  cleanup: () => Promise<void>;
+};
 const types: Record<string, string> = {
   ".txt": "text/plain",
   ".md": "text/markdown",
@@ -61,7 +67,7 @@ function unavailable(): AppError {
   return new AppError(
     503,
     "STORAGE_UNAVAILABLE",
-    "File staging is unavailable. Your message has not been sent. Please retry or contact the operator.",
+    "File staging is unavailable. Your upload has not been saved. Please retry or contact the operator.",
   );
 }
 
@@ -153,6 +159,7 @@ async function stageFile(
 function multipartParser(
   headers: Headers,
   max: number,
+  count: number,
 ): ReturnType<typeof busboy> {
   try {
     return busboy({
@@ -161,9 +168,10 @@ function multipartParser(
       defParamCharset: "utf8",
       // Busboy marks an exactly reached limit truncated; allow one byte to distinguish overflow.
       limits: {
-        files: 5,
+        files: count,
         fields: 2,
-        parts: 7,
+        // Busboy emits partsLimit when the exact count is reached; fields/files validate extras.
+        parts: count + 3,
         fileSize: max + 1,
         fieldSize: 16000,
       },
@@ -176,11 +184,13 @@ function multipartParser(
 async function parseMultipart(
   request: Request,
   directory: string,
-): Promise<Omit<MessageUpload, "cleanup">> {
+  kind: "message" | "deliverable",
+): Promise<{ fields: Record<string, string>; files: Upload[] }> {
   const max = readConfiguration().storage.maxBytes;
+  const count = kind === "message" ? 5 : 1;
   const tasks: Promise<Upload>[] = [];
   const fields: Record<string, string> = {};
-  const parser = multipartParser(request.headers, max);
+  const parser = multipartParser(request.headers, max, count);
   let failure: unknown;
   const fail = (error: unknown): void => {
     failure ??= error;
@@ -188,7 +198,8 @@ async function parseMultipart(
   };
   parser.on("file", (name, stream, info) => {
     try {
-      if (name !== "files") throw invalid("Unexpected attachment field.");
+      if (name !== (kind === "message" ? "files" : "file"))
+        throw invalid("Unexpected file field.");
       if (!info.filename) throw invalid("An attachment filename is required.");
       const type = attachmentType(info.filename, info.mimeType);
       const task = stageFile(
@@ -206,23 +217,28 @@ async function parseMultipart(
   });
   parser.on("field", (name, value, info) => {
     if (
-      !["body", "requestId"].includes(name) ||
+      ![
+        kind === "message" ? "body" : "parentDeliverableId",
+        "requestId",
+      ].includes(name) ||
       fields[name] !== undefined ||
       info.valueTruncated
     )
-      fail(invalid("Invalid message fields."));
+      fail(invalid("Invalid upload fields."));
     else fields[name] = value;
   });
   for (const event of ["filesLimit", "fieldsLimit", "partsLimit"] as const)
     parser.on(event, () =>
-      fail(invalid("Send at most five attachments and one message.")),
+      fail(invalid(`Send at most ${count} file${count === 1 ? "" : "s"}.`)),
     );
   let bytes = 0;
   const bound = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       bytes += chunk.length;
       callback(
-        bytes > max * 5 + 32768 ? invalid("Upload is too large.", 413) : null,
+        bytes > max * count + 32768
+          ? invalid("Upload is too large.", 413)
+          : null,
         chunk,
       );
     },
@@ -253,21 +269,64 @@ async function parseMultipart(
     if (outcome.status === "rejected") throw outcome.reason;
     return outcome.value;
   });
-  const parsed = z
-    .object({
-      requestId: z.uuid(),
-      body: z.string().trim().max(4000).default(""),
-    })
-    .strict()
-    .parse(fields);
-  if (!parsed.body && !files.length)
-    throw invalid("Write a message or choose an attachment.");
-  return { ...parsed, files };
+  return { fields, files };
 }
 
 export async function readMessageUpload(
   request: Request,
 ): Promise<MessageUpload> {
+  const upload = await readUpload(request, "message");
+  try {
+    const parsed = z
+      .object({
+        requestId: z.uuid(),
+        body: z.string().trim().max(4000).default(""),
+      })
+      .strict()
+      .parse(upload.fields);
+    if (!parsed.body && !upload.files.length)
+      throw invalid("Write a message or choose an attachment.");
+    return { ...parsed, files: upload.files, cleanup: upload.cleanup };
+  } catch (error: unknown) {
+    await upload.cleanup();
+    throw error;
+  }
+}
+
+export async function readDeliverableUpload(
+  request: Request,
+): Promise<DeliverableUpload> {
+  const upload = await readUpload(request, "deliverable");
+  try {
+    const parsed = z
+      .object({
+        requestId: z.uuid(),
+        parentDeliverableId: z.uuid().optional(),
+      })
+      .strict()
+      .parse(upload.fields);
+    if (upload.files.length !== 1)
+      throw invalid("Choose one deliverable file.");
+    return {
+      requestId: parsed.requestId,
+      parentDeliverableId: parsed.parentDeliverableId ?? null,
+      files: upload.files,
+      cleanup: upload.cleanup,
+    };
+  } catch (error: unknown) {
+    await upload.cleanup();
+    throw error;
+  }
+}
+
+async function readUpload(
+  request: Request,
+  kind: "message" | "deliverable",
+): Promise<{
+  fields: Record<string, string>;
+  files: Upload[];
+  cleanup: () => Promise<void>;
+}> {
   const config = readConfiguration();
   if (
     request.headers.get("origin") !== config.origin ||
@@ -278,20 +337,20 @@ export async function readMessageUpload(
     throw new AppError(
       415,
       "UNSUPPORTED_MEDIA_TYPE",
-      "Send a multipart/form-data message.",
+      "Send a multipart/form-data upload.",
     );
   const staging = join(config.storage.path, ".staging");
   let directory: string;
   try {
     await mkdir(staging, { recursive: true, mode: 0o700 });
-    directory = await mkdtemp(join(staging, "message-"));
+    directory = await mkdtemp(join(staging, `${kind}-`));
   } catch {
     throw unavailable();
   }
   const cleanup = (): Promise<void> =>
     rm(directory, { recursive: true, force: true });
   try {
-    return { ...(await parseMultipart(request, directory)), cleanup };
+    return { ...(await parseMultipart(request, directory, kind)), cleanup };
   } catch (error: unknown) {
     await cleanup();
     throw error;

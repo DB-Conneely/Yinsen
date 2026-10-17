@@ -201,6 +201,17 @@ describe("actual conversation writers, bounded files and current authorization",
   it("rejects count, size, type, malformed, empty and cross-origin uploads", async () => {
     const text = (data: string): Blob =>
       new Blob([data], { type: "text/plain" });
+    const five = await readMessageUpload(
+      request(
+        "Five valid attachments",
+        Array.from({ length: 5 }, () => ({
+          filename: "file.txt",
+          body: text(bytes),
+        })),
+      ),
+    );
+    expect(five.files).toHaveLength(5);
+    await five.cleanup();
     await expect(readMessageUpload(request("", []))).rejects.toMatchObject({
       statusCode: 400,
     });

@@ -10,6 +10,7 @@ import {
 } from "../projects/access";
 import { getProject, type ProjectDetail } from "../projects/queries";
 import { projectActivity } from "../projects/service";
+import { removeFailedFiles, type StoredFile } from "../storage/adapter";
 import {
   milestoneFields,
   milestonePatch,
@@ -125,6 +126,7 @@ export async function mutateMilestone(
 ): Promise<ProjectDetail> {
   if (action !== "approve") operatorOnly(actor);
   const projectId = await milestoneProject(id);
+  const removedFiles: StoredFile[] = [];
   const project = await getSql().begin(async (sql) => {
     await lockProject(sql, projectId, actor);
     const current = await getProject(projectId, actor, sql);
@@ -133,6 +135,11 @@ export async function mutateMilestone(
     if (action === "approve")
       await approveMilestone(sql, current, id, actor, input);
     else if (action === "delete") {
+      removedFiles.push(
+        ...(await sql<
+          StoredFile[]
+        >`select storage_key as key,driver,size::float8 as size,mime_type as "mimeType" from deliverables where milestone_id=${id}`),
+      );
       await sql`delete from milestones where id=${id}`;
       await renumber(
         sql,
@@ -150,6 +157,8 @@ export async function mutateMilestone(
     );
     return getProject(projectId, actor, sql);
   });
+  // Delete bytes only after the database acknowledges the milestone cascade commit.
+  await removeFailedFiles(removedFiles);
   publishProject(
     projectId,
     project.members.map((member) => member.id),

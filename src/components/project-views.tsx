@@ -19,6 +19,8 @@ import { MessageThread } from "./message-thread";
 import { readConfiguration } from "../lib/config";
 import { messageSummary } from "../lib/messages/queries";
 import { formatBudget } from "../lib/money";
+import { listDeliverables } from "../lib/deliverables/queries";
+import { MilestoneFiles } from "./milestone-files";
 
 function status(value: string): string {
   return value.replaceAll("_", " ");
@@ -146,6 +148,7 @@ export async function ProjectWorkspace({
   actor: ProjectActor;
 }): Promise<ReactElement> {
   const project = await detail(id, actor);
+  const files = await listDeliverables(id, actor);
   const operator = actor.role === "operator";
   const primary = project.members.some(
     (member) => member.id === actor.id && member.role === "primary",
@@ -237,6 +240,15 @@ export async function ProjectWorkspace({
                 </div>
                 <p className="preserve-lines">{milestone.description}</p>
                 {milestone.dueDate && <p>Due {milestone.dueDate}</p>}
+                <MilestoneFiles
+                  milestoneId={milestone.id}
+                  milestoneName={milestone.name}
+                  files={files.filter(
+                    (file) => file.milestoneId === milestone.id,
+                  )}
+                  operator={operator}
+                  maxBytes={readConfiguration().storage.maxBytes}
+                />
                 <MilestoneActions
                   milestone={milestone}
                   total={project.milestones.length}

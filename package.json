@@ -21,6 +21,7 @@
     "test:projects": "tsx tests/projects-http.ts",
     "test:messages": "tsx tests/messages-http.ts",
     "test:proposals": "tsx tests/proposals-http.ts",
+    "test:deliverables": "tsx tests/deliverables-http.ts",
     "test:setup-race": "tsx tests/setup-race.ts",
     "check:markers": "node scripts/check-markers.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run check:markers && npm run build",
