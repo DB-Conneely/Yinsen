@@ -128,9 +128,14 @@ describe("public rendering and safe logs", () => {
   });
   it("sets security headers through the real Next configuration", async () => {
     const headers = await nextConfig.headers?.();
+    expect(headers?.[0]?.source).toBe("/(.*)");
     expect(headers?.[0]?.headers).toContainEqual({
       key: "X-Frame-Options",
       value: "DENY",
+    });
+    expect(headers?.[0]?.headers).toContainEqual({
+      key: "Strict-Transport-Security",
+      value: "max-age=31536000",
     });
   });
   it("logs only the explicit code and correlation ID", () => {

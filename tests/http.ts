@@ -5,6 +5,10 @@ const health = await fetch(`${origin}/api/health`);
 assert.equal(health.status, 200);
 assert.equal(health.headers.get("x-frame-options"), "DENY");
 assert.equal(health.headers.get("x-content-type-options"), "nosniff");
+assert.equal(
+  health.headers.get("strict-transport-security"),
+  "max-age=31536000",
+);
 assert.equal(health.headers.get("cache-control"), "no-store");
 assert.match(health.headers.get("x-request-id") ?? "", /^[\da-f-]{36}$/);
 const body: unknown = await health.json();
@@ -15,5 +19,6 @@ assert.deepEqual(body, {
 });
 const page = await fetch(origin);
 assert.equal(page.status, 200);
+assert.equal(page.headers.get("strict-transport-security"), "max-age=31536000");
 assert.match(await page.text(), /Your client portal|Set up your portal/);
 process.stdout.write(`Installed HTTP foundation passed: ${origin}\n`);
