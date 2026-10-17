@@ -2,7 +2,7 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
-Development is ongoing. Operator/client access, projects, milestones, messages, private attachments, negotiated proposals and versioned deliverables are implemented. Invoices, payments and the remaining product features are still in development; integrated verification continues.
+Development is ongoing. Operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices and full manual settlement are implemented. Direct Stripe payment and the remaining product features are still in development; integrated verification continues.
 
 ## Run with Docker Compose
 
@@ -38,7 +38,13 @@ General conversations and project conversations support private messages and att
 
 Upload deliverables from a milestone in the project workspace, choosing a new file or a version of an existing deliverable. Every version starts locked. The operator can release or relock each version independently; clients can download only currently released versions, including in the version history. Deliverables use the same private local or S3 storage and per-file size limit as attachments, with one file per upload. Ordinary message attachments remain available without a release or payment gate.
 
-Run one long-lived application process. Live updates, rate limits and scheduled access cleanup use that process; multiple replicas are not currently supported.
+Create invoices from the dashboard. Choose the recipient, currency, line items and optional agreed total override, then review and send. Sending freezes the recipient, financial terms and milestone links. Financial changes require cancellation and a new invoice. Configure numbering and payment instructions in the invoice list. Prefix/counter changes affect future invoices, and used numbers stay reserved. Sending captures the current payment instructions.
+
+With email configured, sending submits the invoice link to the recipient. An email failure leaves the draft available to retry. Without email, send the invoice and privately share its portal link; the recipient must sign in. Record a full manual settlement with its payment method and reference after receiving the exact invoice amount. Partial or excess amounts cannot settle it. Paid and settled invoices cannot be cancelled or deleted.
+
+Link milestones only when payment of **any one linked invoice** should release every deliverable version then present on those milestones. Other linked invoices may remain unpaid. No links means no automatic release. Later uploads remain locked; a repeated settlement does not undo a manual relock.
+
+Run one long-lived application process. Live updates, rate limits, expired-access cleanup and overdue invoice checks use that process; multiple replicas are not currently supported. Overdue checks run at startup and hourly.
 
 ## Configuration and storage
 
@@ -81,6 +87,6 @@ Stop development/built source processes sharing `.next` before another build. Ru
 TEST_ISOLATED_DATABASE=1 npm run check
 ```
 
-Installed HTTP suites are `test:http`, `test:access`, `test:clients`, `test:projects`, `test:messages` and `test:proposals`. They require an ordinary running isolated application and its matching `TEST_ORIGIN`. Start a fresh fixture process for each security suite's rate-limit window. `test:setup-race` requires a separate empty, migrated fixture and preserves the setup it creates.
+Installed HTTP suites are `test:http`, `test:access`, `test:clients`, `test:projects`, `test:messages`, `test:proposals`, `test:deliverables` and `test:invoices`. They require an ordinary running isolated application and its matching `TEST_ORIGIN`. Start a fresh fixture process for each security suite's rate-limit window. `test:setup-race` requires a separate empty, migrated fixture and preserves the setup it creates.
 
 Passing checks supports actual functional verification through the browser, database and configured provider. Component placement, visual hierarchy, responsive layouts, keyboard/focus, failure/retry and private data access also require review in the running application.

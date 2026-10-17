@@ -135,6 +135,14 @@ export async function mutateMilestone(
     if (action === "approve")
       await approveMilestone(sql, current, id, actor, input);
     else if (action === "delete") {
+      const linked =
+        await sql`select 1 from invoice_milestones im join invoices i on i.id=im.invoice_id where im.milestone_id=${id} and i.status in ('sent','overdue','paid','settled') limit 1`;
+      if (linked.length)
+        throw new AppError(
+          409,
+          "INVOICED_MILESTONE",
+          "This milestone is linked to an issued invoice. Cancel unpaid invoices first; paid or settled invoice links must be retained.",
+        );
       removedFiles.push(
         ...(await sql<
           StoredFile[]

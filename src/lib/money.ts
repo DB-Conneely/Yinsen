@@ -49,7 +49,10 @@ export function budgetInput(amount: number | null, currency: string): string {
 
 export function formatBudget(amount: number | null, currency: string): string {
   if (amount === null) return "Budget not set";
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(
-    amount / 10 ** currencyDigits(currency),
-  );
+  // Older browser ICU lacks XCG's symbol; its code keeps server/client totals identical.
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    currencyDisplay: currency === "XCG" ? "code" : "symbol",
+  }).format(amount / 10 ** currencyDigits(currency));
 }

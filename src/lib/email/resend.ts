@@ -2,6 +2,8 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { readConfiguration } from "../config";
 import { AppError } from "../errors";
+import type { InvoiceDetail } from "../invoices/queries";
+import { formatBudget } from "../money";
 
 async function resend(
   path: string,
@@ -119,6 +121,39 @@ export async function sendMagicLink(input: {
       503,
       "EMAIL_UNAVAILABLE",
       "Email service returned an invalid response.",
+    );
+  return result.data.id;
+}
+
+export async function sendInvoiceEmail(input: {
+  invoice: InvoiceDetail;
+  url: string;
+}): Promise<string> {
+  const email = readConfiguration().email;
+  if (!email)
+    throw new AppError(503, "EMAIL_UNAVAILABLE", "Email is not configured.");
+  const invoice = input.invoice;
+  const amount = formatBudget(invoice.amount, invoice.currency);
+  const summary = `Invoice ${invoice.number}: ${amount}${invoice.dueDate ? `, due ${invoice.dueDate}` : ""}`;
+  const html = `<div style="max-width:600px;margin:auto;font-family:system-ui"><h1>${escapeHtml(invoice.issuerName)}</h1><p>Hi ${escapeHtml(invoice.recipientName)},</p><h2>${escapeHtml(summary)}</h2><p>Your invoice is ready. Sign in with your client account to review the complete items and payment instructions.</p><p><a style="display:inline-block;padding:16px;background:${escapeHtml(invoice.brandColour)};color:${actionTextColour(invoice.brandColour)}" href="${escapeHtml(input.url)}">View invoice</a></p><p>${escapeHtml(invoice.issuerEmail)}</p></div>`;
+  const result = z.object({ id: z.uuid() }).safeParse(
+    await resend(
+      "/emails",
+      {
+        from: email.from,
+        to: [invoice.recipientEmail],
+        subject: `New invoice from ${invoice.issuerName}: ${invoice.number}`,
+        html,
+        text: `Hi ${invoice.recipientName},\n${summary}\nReview your invoice from ${invoice.issuerName}: ${input.url}\nSign in with your client account.\n${invoice.issuerEmail}`,
+      },
+      `invoice/${invoice.id}/${invoice.revision}`,
+    ),
+  );
+  if (!result.success)
+    throw new AppError(
+      503,
+      "EMAIL_UNAVAILABLE",
+      "Email service returned an invalid response. Invoice remains a draft; please retry.",
     );
   return result.data.id;
 }

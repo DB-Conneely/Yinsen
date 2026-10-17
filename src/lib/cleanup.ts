@@ -1,5 +1,6 @@
 import { getSql } from "./db/client";
 import { logger } from "./logger";
+import { markOverdueInvoices } from "./invoices/overdue";
 
 let inFlight: Promise<void> | undefined;
 declare global {
@@ -43,11 +44,24 @@ export function cleanExpiredAccess(): Promise<void> {
 export async function startAccessCleanup(): Promise<void> {
   if (globalThis.yinsenCleanupTimer) return;
   await cleanExpiredAccess();
+  await overdue();
   globalThis.yinsenCleanupTimer = setInterval(
     () => {
       void cleanExpiredAccess();
+      void overdue();
     },
     60 * 60 * 1000,
   );
   globalThis.yinsenCleanupTimer.unref();
+}
+
+async function overdue(): Promise<void> {
+  try {
+    await markOverdueInvoices();
+  } catch {
+    logger.warn(
+      { event: "invoices.overdue_failed" },
+      "Overdue check failed; the next hourly run will retry",
+    );
+  }
 }

@@ -61,11 +61,22 @@ export const settings = pgTable(
     welcomeText: text("welcome_text")
       .notNull()
       .default("Welcome to your client portal."),
+    invoicePrefix: text("invoice_prefix").notNull().default("INV"),
+    invoiceNextNumber: integer("invoice_next_number").notNull().default(1),
+    paymentInstructions: text("payment_instructions").notNull().default(""),
   },
   (table) => [
     check("settings_singleton", sql`${table.singleton} = true`),
     check("settings_colour", sql`${table.brandColour} ~ '^#[0-9A-Fa-f]{6}$'`),
     check("settings_currency", sql`${table.defaultCurrency} ~ '^[A-Z]{3}$'`),
+    check(
+      "settings_invoice_prefix",
+      sql`${table.invoicePrefix} ~ '^[A-Z0-9]{1,10}$'`,
+    ),
+    check(
+      "settings_invoice_counter",
+      sql`${table.invoiceNextNumber} between 1 and 2147483647`,
+    ),
   ],
 );
 
@@ -412,4 +423,104 @@ export const deliverables = pgTable(
     ),
     check("deliverables_driver", sql`${table.driver} in ('local','s3')`),
   ],
+);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid().primaryKey(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    projectId: uuid("project_id").references(() => projects.id),
+    number: text("invoice_number").notNull().unique(),
+    prefix: text().notNull(),
+    sequence: integer().notNull(),
+    status: text()
+      .$type<"draft" | "sent" | "overdue" | "paid" | "settled" | "cancelled">()
+      .notNull()
+      .default("draft"),
+    currency: text().notNull(),
+    amount: integer().notNull(),
+    totalOverride: integer("total_override"),
+    dueDate: date("due_date"),
+    notes: text().notNull().default(""),
+    recipientName: text("recipient_name").notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    issuerName: text("issuer_name").notNull(),
+    issuerEmail: text("issuer_email").notNull(),
+    brandColour: text("brand_colour").notNull(),
+    paymentInstructions: text("payment_instructions").notNull(),
+    emailId: text("email_id"),
+    emailFailed: boolean("email_failed").notNull().default(false),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    settlementData: jsonb("settlement_data").$type<{
+      amountReceived: number;
+      paymentMethod: string;
+      reference: string;
+    }>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("invoices_client").on(table.clientId),
+    index("invoices_project").on(table.projectId),
+    index("invoices_status_due").on(table.status, table.dueDate),
+    uniqueIndex("invoices_prefix_sequence").on(table.prefix, table.sequence),
+    check(
+      "invoices_status",
+      sql`${table.status} in ('draft','sent','overdue','paid','settled','cancelled')`,
+    ),
+    check(
+      "invoices_amount",
+      sql`${table.amount}>0 and (${table.totalOverride} is null or ${table.totalOverride}>0)`,
+    ),
+    check("invoices_currency", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+    check("invoices_sequence", sql`${table.sequence}>0`),
+    check(
+      "invoices_money_received",
+      sql`(${table.status} in ('paid','settled')) = (${table.paidAt} is not null)`,
+    ),
+  ],
+);
+
+export const invoiceLineItems = pgTable(
+  "invoice_line_items",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    description: text().notNull(),
+    quantityHundredths: integer("quantity_hundredths").notNull(),
+    unitPrice: integer("unit_price").notNull(),
+    amount: integer().notNull(),
+    position: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("invoice_items_position").on(table.invoiceId, table.position),
+    check(
+      "invoice_items_values",
+      sql`${table.quantityHundredths}>0 and ${table.unitPrice}>=0 and ${table.amount}>=0 and ${table.position}>=0`,
+    ),
+  ],
+);
+
+export const invoiceMilestones = pgTable(
+  "invoice_milestones",
+  {
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    milestoneId: uuid("milestone_id")
+      .notNull()
+      .references(() => milestones.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.invoiceId, table.milestoneId] })],
 );

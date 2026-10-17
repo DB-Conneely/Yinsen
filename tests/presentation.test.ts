@@ -3,14 +3,105 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardNavigation } from "../src/components/dashboard-nav";
 import { MilestoneFiles } from "../src/components/milestone-files";
+import { InvoiceActions } from "../src/components/invoice-actions";
+import { InvoiceForm } from "../src/components/invoice-form";
+import type { InvoiceDetail } from "../src/lib/invoices/queries";
 
 const route = vi.hoisted(() => ({ pathname: "/dashboard/clients" }));
+const invoice: InvoiceDetail = {
+  id: "00000000-0000-4000-8000-000000000001",
+  clientId: "00000000-0000-4000-8000-000000000002",
+  projectId: "00000000-0000-4000-8000-000000000003",
+  number: "INV-001",
+  status: "cancelled",
+  currency: "GBP",
+  amount: 10000,
+  totalOverride: null,
+  dueDate: null,
+  notes: "",
+  recipientName: "Recipient",
+  recipientEmail: "client@example.test",
+  issuerName: "Studio",
+  issuerEmail: "studio@example.test",
+  brandColour: "#2457a7",
+  paymentInstructions: "Bank transfer",
+  emailFailed: false,
+  sentAt: null,
+  paidAt: null,
+  createdAt: "2026-10-17T00:00:00Z",
+  settlementData: null,
+  revision: "a".repeat(64),
+  lineItems: [
+    {
+      description: "Design",
+      quantityHundredths: 100,
+      unitPrice: 10000,
+      amount: 10000,
+    },
+  ],
+  milestones: [
+    { id: "00000000-0000-4000-8000-000000000004", name: "Design milestone" },
+  ],
+};
 vi.mock("next/navigation", () => ({
   usePathname: () => route.pathname,
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 describe("the installed shared workspace navigation", () => {
+  it("offers a client link only after the invoice was actually issued", () => {
+    const portalUrl = "http://localhost:3051/portal/invoices/" + invoice.id;
+    expect(
+      renderToStaticMarkup(
+        createElement(InvoiceActions, { invoice, email: false, portalUrl }),
+      ),
+    ).not.toContain("Client portal link");
+    expect(
+      renderToStaticMarkup(
+        createElement(InvoiceActions, {
+          invoice: { ...invoice, sentAt: "2026-10-17T00:00:00Z" },
+          email: false,
+          portalUrl,
+        }),
+      ),
+    ).toContain("Client portal link");
+  });
+  it("renders the shared compact release checkbox and deterministic currency choices", () => {
+    const runtime = vi
+      .spyOn(Intl, "supportedValuesOf")
+      .mockReturnValue(["GBP"]);
+    try {
+      const html = renderToStaticMarkup(
+        createElement(InvoiceForm, {
+          currency: "GBP",
+          invoice: { ...invoice, status: "draft" },
+          choices: {
+            clients: [{ id: invoice.clientId, name: "Recipient" }],
+            projects: [
+              {
+                id: invoice.projectId ?? "",
+                name: "Project",
+                clientIds: [invoice.clientId],
+              },
+            ],
+            milestones: [
+              {
+                ...invoice.milestones[0],
+                id: "00000000-0000-4000-8000-000000000004",
+                name: "Design milestone",
+                projectId: invoice.projectId ?? "",
+              },
+            ],
+          },
+        }),
+      );
+      expect(html).toContain('class="checkbox"');
+      expect(html).toContain("<option>SLE</option>");
+      expect(html).toContain("any linked invoice");
+    } finally {
+      runtime.mockRestore();
+    }
+  });
   it("keeps client management in the operator workspace and marks its actual route", () => {
     route.pathname = "/dashboard/clients/record";
     const html = renderToStaticMarkup(createElement(DashboardNavigation));

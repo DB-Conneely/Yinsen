@@ -26,6 +26,10 @@ describe("shared project and proposal currency amounts", () => {
     expect(formatBudget(12345, "KWD")).toContain("12.345");
     expect(formatBudget(null, "GBP")).toBe("Budget not set");
   });
+  it("uses the XCG code consistently across server and older browser currency data", () => {
+    expect(formatBudget(12501, "XCG")).toBe("XCG\u00a0125.01");
+    expect(minorAmount(budgetInput(12501, "XCG"), "XCG")).toBe(12501);
+  });
   it("rejects unsupported precision, malformed currency and overflow before JSON serialization", () => {
     for (const [value, currency] of [
       ["1.2", "JPY"],
