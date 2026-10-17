@@ -16,6 +16,7 @@
     "format:check": "prettier --check src scripts tests '*.{json,ts,mjs,yaml}' README.md docs/operator.md docs/as-built",
     "test": "vitest run",
     "test:http": "tsx --env-file=.env tests/http.ts",
+    "test:access": "tsx tests/access-http.ts",
     "check:markers": "node scripts/check-markers.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run check:markers && npm run build",
     "db:generate": "drizzle-kit generate",
@@ -24,6 +25,7 @@
   },
   "dependencies": {
     "@next/env": "16.4.2",
+    "bcryptjs": "3.0.3",
     "drizzle-orm": "0.45.4",
     "next": "16.4.2",
     "pino": "10.4.0",

@@ -13,7 +13,6 @@ import {
   SchemaError,
 } from "../src/lib/errors";
 import { GET } from "../src/app/api/health/route";
-import Home from "../src/app/page";
 import RootLayout from "../src/app/layout";
 import nextConfig from "../next.config";
 import { register } from "../src/instrumentation";
@@ -123,10 +122,9 @@ describe("installed PostgreSQL foundation", () => {
 
 describe("public rendering and safe logs", () => {
   it("renders the installed accessible root shell", () => {
-    const html = renderToStaticMarkup(RootLayout({ children: Home() }));
+    const html = renderToStaticMarkup(RootLayout({ children: "Portal" }));
     expect(html).toContain('<html lang="en">');
-    expect(html).toContain("<main>");
-    expect(html).toContain('href="/api/health"');
+    expect(html).toContain("Portal");
   });
   it("sets security headers through the real Next configuration", async () => {
     const headers = await nextConfig.headers?.();

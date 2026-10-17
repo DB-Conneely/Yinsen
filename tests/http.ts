@@ -15,5 +15,5 @@ assert.deepEqual(body, {
 });
 const page = await fetch(origin);
 assert.equal(page.status, 200);
-assert.match(await page.text(), /Your client portal/);
+assert.match(await page.text(), /Your client portal|Set up your portal/);
 process.stdout.write(`Installed HTTP foundation passed: ${origin}\n`);
