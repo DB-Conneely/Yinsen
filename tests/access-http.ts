@@ -121,7 +121,8 @@ try {
         `Missing ${header} on safe failure`,
       );
     const body = await failed.text();
-    assert.match(body, /Reload/);
+    // The browser hydrates the framework's Reload control from this error document.
+    assert.match(body, /<html id="__next_error__">/);
     assert.doesNotMatch(body, /Welcome, Remote Operator/);
     assert.equal(
       (await fetch(`${origin}/api/auth/me`, { headers: { Cookie: cookie } }))
