@@ -1,4 +1,10 @@
-# Current handover — Phase 1 VERIFIED, remote Phase 2 transfer
+# Current handover — Phase 2 in progress
+
+17 October 2026. The remote `phase2 yinsen` orchestrator (`01a14734-b136-7dd2-ab4c-2f9e27b31349`) accepted Phase 1's verified handoff after independently checking the fresh sole QA verdict, all 100 source hashes, 62 evidence artifacts, six QA record hashes, effective private configuration, actual service identity and persisted canonical database facts. Phase 1 relinquished all write/resource ownership through its successful dispatch receipt. Phase 2 now owns repository/Git/maps/heavy/browser coordination and the inherited canonical preview/database. See [Phase 2's launch and current ownership](as-built/phase-02.md).
+
+Locked next work: fresh sequential implementors for 2.1 projects/milestones/lock-in, 2.2 messages/attachments and 2.3 proposals. Phase 2 is **IN PROGRESS / UNVERIFIED**; no Phase 2 completion or Phase 3 dispatch is claimed. All execution remains on `abyssbox`, `/home/neels/development/yinsen`. One heavy command at a time; preserve private configuration, all data/evidence and unrelated services. No push or deployment.
+
+## Preserved Phase 1 verified handoff
 
 17 October 2026. Neels's remote resume supersedes the historical pause and stop-after-1.1 instructions below. Tasks 1.1–1.3, three independent task audits, three coordinated report-specific patch handovers and fresh write-capable QA are complete. **Sole QA `/root/qa_01_remote` issued VERIFIED after the actual domain-email receipt/rendering/received-link login and separately authorised live setup check passed.** All twelve audit findings have final dispositions, including Neels's explicit generic-response policy approval. See the [QA verdict and proof](qa/phase-01.md#final-live-provider-proof-and-acceptance--17-october-2026). The orchestrator is finalising the authorised transfer to the verified remote Phase 2 chat; the actual dispatch receipt is `.local/orchestrator-phase1/phase2-dispatch.json`. No push, deployment or Phase 2 implementation occurred in this Phase 1 chat.
 
