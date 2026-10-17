@@ -1,5 +1,16 @@
 # Current as-built system
 
+17 October 2026: Task 1.1 is handed over on `abyssbox`, `/home/neels/development/yinsen`, under Neels's explicit Phase 1 resume. The historical pause snapshot below is retained as provenance. **Phase 1 remains UNVERIFIED; fresh Task 1.2 owns setup/operator access next.**
+
+- Runnable Next 16.4.2/React 19.3.1/PostgreSQL 16.13/Drizzle foundation, explicit migrations/status, separate runtime/migrator privileges, startup refusal, DB-backed health and safe headers/errors/logs. Source and nonroot container entrypoints were rebuilt/exercised on Linux; all final gates and 29 tests pass.
+- Completed standalone launchers load current root production config, strip admin/migrator variables from the production child, serve actual static assets and remove generated dotenv copies. Actual source/container config/schema refusal, database failure/recovery and unchanged facts across app/database restart are recorded in [Phase 1](phase-01.md).
+- Source/configuration identity: 39 files, SHA-256 `e355df1e867e0565b2f8248a8da507cbdb6dc94134cdbac2f70e2b68cf08ee08`. Current source-bound Cortex/Graphify maps are refreshed, with SQL parser limitations recorded. They are navigation aids only.
+- Restored database `yinsen_abyss-postgres-1` remains healthy on loopback 55432, original volume preserved. Source production preview on loopback 3000 is owned in `.local/remote-11/service.json` (PID/group 1862432, server 1862476); verify before stopping for changes. Separate synthetic Task 1.1 app/database on ports 3006/55433 are stopped with their volume/images/private evidence retained.
+- All heavy work was serial. Use a task-owned disk `TMPDIR` because shared `/tmp` has exhausted its user quota; Docker builds used private task CLI state rather than changing the root-owned shared buildx activity file. Do not overlap development/build output or touch unrelated projects.
+- No operator/client identities, business workflows, phase audits or QA acceptance yet. Resend code belongs to Task 1.3, and real configured delivery remains explicitly unverified until Neels provides its configuration. No Phase 2 work or message is authorized before fresh QA VERIFIED.
+
+## Historical pause snapshot — 16 October 2026
+
 16 October 2026. **PAUSED at Neels's request, inside unfinished Task 1.1. Phase 1 is UNVERIFIED. Task 1.2 has not started.** See the [current handover](../handover.md) for the exact restart seam and [Phase 1](phase-01.md) for evidence/source identity and remaining checks.
 
 - Source: local `main` at initial foundation increment `7b367dc`, followed by documentation-only pause recording. Latest standalone startup correction and Docker/installation packaging remain dirty/untracked and unverified after the last edits. Do not discard them or accept an older test run as their proof.

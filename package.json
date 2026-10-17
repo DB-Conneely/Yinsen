@@ -8,8 +8,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build && tsx scripts/standalone.ts",
+    "start": "tsx scripts/start.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write src scripts tests '*.{json,ts,mjs,yaml}' README.md docs/operator.md docs/as-built",

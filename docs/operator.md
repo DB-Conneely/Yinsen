@@ -1,6 +1,6 @@
 # Running your installation
 
-Working draft from unfinished Task 1.1, paused on 16 October 2026. The latest standalone/startup changes and final container/tools checks are not yet verified. Follow the [current handover](handover.md) for the existing resource state and outstanding proof; these instructions are not a completed installation acceptance.
+Task 1.1 foundation instructions, resumed on Abyss on 17 October 2026. Account setup and client access follow in Tasks 1.2 and 1.3; Phase 1 acceptance remains with fresh QA. See the [current handover](handover.md) and [source-bound evidence](as-built/phase-01.md).
 
 Yinsen uses one long-lived Node.js application and PostgreSQL 16. Infrastructure credentials stay in server environment variables. No external provider is required for the foundation. Account setup and client access are delivered by the following Phase 1 tasks; this foundation alone is not a complete client portal.
 
@@ -12,7 +12,8 @@ Run these commands from the repository root:
 
 ```sh
 docker compose up -d --wait postgres
-docker compose build
+docker compose build app
+docker compose --profile tools build migrate
 docker compose run --rm migrate
 docker compose run --rm migrate npm run db:status
 docker compose up -d --wait app
@@ -45,7 +46,9 @@ npm run build
 npm start
 ```
 
-Both production entrypoints use Next's supported generated standalone `server.js` and run the same instrumentation startup guard. The source launcher loads the current root environment before starting it. Build preparation copies static assets and removes only generated dotenv copies from the standalone output, so build-time secrets do not become runtime configuration. Builds do not require a database or real secrets; configuration and schema validation run when the server starts. Do not run development and production builds against the same `.next` directory concurrently.
+For a loopback-only source preview, use `HOSTNAME=127.0.0.1 PORT=3000 npm start`. Stop the development server before building; the development and production commands share `.next`.
+
+Both production entrypoints use Next's supported generated standalone `server.js` and run the same instrumentation startup guard. The source launcher loads the current root environment before starting it, then removes admin/migrator credentials and redundant password variables from the child runtime environment. Contributor development commands load the full local `.env`; use synthetic data there. Build preparation copies static assets and removes only generated dotenv copies from the standalone output, so build-time secrets do not become runtime configuration. Builds do not require a database or real secrets; configuration and schema validation run when the server starts. Do not run development and production builds against the same `.next` directory concurrently.
 
 ## Configuration and database access
 
@@ -67,3 +70,11 @@ npm run test:http
 ```
 
 See [engineering gates](as-built/engineering-gates.md) for the rule-to-command mapping and exercised failures. These checks support real functional proof; they do not establish account, project, invoice or provider behaviour by themselves.
+
+## Current Abyss development resources
+
+Run this checkout only on `abyssbox` at `/home/neels/development/yinsen` (SSH alias `abyss`), with Node 22.21.1/npm 10.9.4. The restored private database is `yinsen_abyss-postgres-1`, volume `yinsen_abyss_postgres_data`, bound to `127.0.0.1:55432`. Its Compose configuration belongs to the preserved migration fixture; inspect its labels/mounts before operation. Use `docker start yinsen_abyss-postgres-1` when it is stopped. Do not recreate it from this repository's generic Compose file or remove its volume. The private root `.env` selects this fixture.
+
+Task 1.1's separate synthetic rehearsal is project `yinsen_t11_remote_20261017`, database port 55433 and app port 3006. Its retained private configuration and service ownership records live under ignored `.local/remote-11/`; neither passwords nor raw logs belong in commits. Port 3001 belongs to another project.
+
+Run heavy builds/checks/browser suites serially across agents. On this server, the shared `/tmp` user quota was exhausted despite free disk space. Use a task-owned on-disk temporary directory, for example `mkdir -p .local/tmp` then `TMPDIR="$PWD/.local/tmp" npm run check`; do not clean another workload's files. The shared Docker buildx activity file was root-owned, so rehearsal used a private `DOCKER_CONFIG` directory under `.local/remote-11/docker-cli` rather than modifying shared Docker configuration. This changes the CLI state location, not the Docker daemon or application configuration.

@@ -1,6 +1,6 @@
 # Yinsen
 
-Open-source, self-hosted client portal for freelancers and small agencies. Phase 1 resumed on Abyss on 17 October 2026, beginning with unfinished Task 1.1. An initial runnable foundation is committed; its latest startup/packaging changes still need final verification. Operator/client access follows in Tasks 1.2 and 1.3. Phase 1 remains unverified; see the [current handover](docs/handover.md).
+Open-source, self-hosted client portal for freelancers and small agencies. Phase 1 resumed on Abyss on 17 October 2026. Task 1.1's runnable foundation and startup/packaging correction have completed their Linux handover. Operator/client access follows in Tasks 1.2 and 1.3. Phase 1 remains unverified; see the [current handover](docs/handover.md).
 
 Start with [AGENTS.md](AGENTS.md), the [planning index](docs/rebuild/README.md) and [current handover](docs/handover.md). The original client-portal repository remains intact; this is a fresh Git repository with its own history, not a copied implementation or rewritten ancestry.
 

@@ -1,0 +1,58 @@
+name: yinsen
+services:
+  postgres:
+    image: postgres:16.13-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
+    environment:
+      POSTGRES_DB: yinsen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      MIGRATION_PASSWORD: ${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}
+      RUNTIME_PASSWORD: ${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-database.sql:/docker-entrypoint-initdb.d/10-yinsen.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d yinsen"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  migrate:
+    build:
+      context: .
+      target: tools
+    profiles: ["tools"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://yinsen_migrator:${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}@postgres:5432/yinsen
+      DATABASE_SSL: disable
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: ["npm", "run", "db:migrate"]
+  app:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://yinsen_runtime:${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}@postgres:5432/yinsen
+      DATABASE_SSL: disable
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+volumes:
+  postgres_data:

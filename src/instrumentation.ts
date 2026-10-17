@@ -6,11 +6,20 @@ export async function register(): Promise<void> {
     const { readConfiguration } = await import("./lib/config");
     const { checkDatabase } = await import("./lib/db/health");
     const { logger } = await import("./lib/logger");
-    readConfiguration();
-    await checkDatabase();
-    logger.info(
-      { event: "startup.ready" },
-      "Configuration and database schema verified",
-    );
+    const { AppError } = await import("./lib/errors");
+    try {
+      readConfiguration();
+      await checkDatabase();
+      logger.info(
+        { event: "startup.ready" },
+        "Configuration and database schema verified",
+      );
+    } catch (error: unknown) {
+      logger.fatal(
+        { code: error instanceof AppError ? error.code : "STARTUP_FAILED" },
+        "Startup refused. Check configuration, database service and migration status.",
+      );
+      process.exit(1);
+    }
   }
 }

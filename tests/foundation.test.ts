@@ -7,7 +7,11 @@ import { getDb, getSql } from "../src/lib/db/client";
 import { checkDatabase } from "../src/lib/db/health";
 import { assertSchema } from "../src/lib/db/status";
 import { installation } from "../src/lib/db/schema";
-import { DatabaseError, SchemaError } from "../src/lib/errors";
+import {
+  ConfigurationError,
+  DatabaseError,
+  SchemaError,
+} from "../src/lib/errors";
 import { GET } from "../src/app/api/health/route";
 import Home from "../src/app/page";
 import RootLayout from "../src/app/layout";
@@ -94,6 +98,26 @@ describe("installed PostgreSQL foundation", () => {
       meta: null,
       error: null,
     });
+  });
+  it("logs a safe fatal code and exits when startup configuration is invalid", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("APP_ORIGIN", "invalid-secret-origin");
+    const fatal = vi.spyOn(logger, "fatal").mockImplementation(() => undefined);
+    const exit = vi.spyOn(process, "exit").mockImplementation((): never => {
+      throw new ConfigurationError("synthetic process boundary");
+    });
+    try {
+      await expect(register()).rejects.toThrow("synthetic process boundary");
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(fatal).toHaveBeenCalledWith(
+        { code: "CONFIGURATION_ERROR" },
+        "Startup refused. Check configuration, database service and migration status.",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      fatal.mockRestore();
+      exit.mockRestore();
+    }
   });
 });
 
