@@ -19,7 +19,8 @@ export default async function DashboardLayout({
   return (
     <BrandFrame branding={branding}>
       <div className="dashboard">
-        <aside aria-label="Operator navigation">
+        <aside className="workspace-sidebar" aria-label="Operator navigation">
+          <p className="nav-label">Workspace</p>
           <DashboardNavigation />
           <div className="sidebar-account">
             <div className="operator-profile">
@@ -31,7 +32,9 @@ export default async function DashboardLayout({
             <LogoutButton />
           </div>
         </aside>
-        <main>{children}</main>
+        <main className="workspace-content" id="main-content">
+          {children}
+        </main>
       </div>
     </BrandFrame>
   );

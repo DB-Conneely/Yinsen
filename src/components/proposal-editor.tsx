@@ -112,6 +112,7 @@ export function ProposalEditor({
         aria-label={proposalId ? "Counter proposal" : "New proposal"}
         aria-busy={pending}
       >
+        <p className="eyebrow">Scope & agreement</p>
         <h2 id="proposal-editor-title">
           {proposalId ? "Counter proposal" : "Propose a project"}
         </h2>
@@ -248,7 +249,7 @@ export function ProposalEditor({
           </button>
         </fieldset>
         <p role="alert">{error}</p>
-        <div className="actions">
+        <div className="actions dialog-actions">
           <button disabled={pending}>
             {pending
               ? "Sending…"

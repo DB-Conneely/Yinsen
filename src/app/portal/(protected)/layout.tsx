@@ -4,28 +4,36 @@ import { clientForPage } from "../../../lib/auth/client-page";
 import { getBranding } from "../../../lib/settings";
 import { BrandFrame } from "../../../components/brand";
 import { LogoutButton } from "../../../components/auth-forms";
-import Link from "next/link";
-import { MessageNotifications } from "../../../components/message-notifications";
+import { DashboardNavigation } from "../../../components/dashboard-nav";
 export const dynamic = "force-dynamic";
 export default async function PortalLayout({
   children,
 }: {
   children: ReactNode;
 }): Promise<ReactElement> {
-  await clientForPage();
+  const identity = await clientForPage();
   const branding = await getBranding();
   if (!branding) redirect("/setup");
   return (
     <BrandFrame branding={branding}>
-      <main>
-        <nav className="actions portal-nav">
-          <a href="/portal">Your account</a>
-          <Link href="/portal/projects">Projects</Link>
-          <MessageNotifications role="client" />
-          <LogoutButton destination="/portal/login" />
-        </nav>
-        {children}
-      </main>
+      <div className="dashboard portal-shell">
+        <aside className="workspace-sidebar" aria-label="Client navigation">
+          <p className="nav-label">Client portal</p>
+          <DashboardNavigation role="client" />
+          <div className="sidebar-account">
+            <div className="operator-profile">
+              <div>
+                <strong>{identity.name}</strong>
+                <span>Client account</span>
+              </div>
+            </div>
+            <LogoutButton destination="/portal/login" />
+          </div>
+        </aside>
+        <main className="workspace-content" id="main-content">
+          {children}
+        </main>
+      </div>
     </BrandFrame>
   );
 }

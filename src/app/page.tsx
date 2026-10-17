@@ -15,7 +15,7 @@ export default async function Home(): Promise<ReactElement> {
   if (!branding) redirect("/setup");
   return (
     <BrandFrame branding={branding}>
-      <main className="hero">
+      <main className="hero" id="main-content">
         <p className="eyebrow">Your client portal</p>
         <h1>{branding.brandName}</h1>
         <p>{branding.welcomeText}</p>

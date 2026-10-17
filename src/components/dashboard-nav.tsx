@@ -3,36 +3,42 @@ import type { ReactElement } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageNotifications } from "./message-notifications";
-export function DashboardNavigation(): ReactElement {
+export function DashboardNavigation({
+  role = "operator",
+}: {
+  role?: "operator" | "client";
+}): ReactElement {
   const pathname = usePathname();
+  const root = role === "operator" ? "/dashboard" : "/portal";
   return (
-    <nav aria-label="Workspace">
-      <Link
-        href="/dashboard"
-        aria-current={pathname === "/dashboard" ? "page" : undefined}
-      >
-        Overview
+    <nav className="workspace-nav" aria-label="Workspace">
+      <Link href={root} aria-current={pathname === root ? "page" : undefined}>
+        {role === "operator" ? "Overview" : "Your account"}
       </Link>
+      {role === "operator" && (
+        <Link
+          href="/dashboard/clients"
+          aria-current={
+            pathname?.startsWith("/dashboard/clients") ? "page" : undefined
+          }
+        >
+          Clients
+        </Link>
+      )}
       <Link
-        href="/dashboard/clients"
+        href={`${root}/projects`}
         aria-current={
-          pathname?.startsWith("/dashboard/clients") ? "page" : undefined
-        }
-      >
-        Clients
-      </Link>
-      <Link
-        href="/dashboard/projects"
-        aria-current={
-          pathname?.startsWith("/dashboard/projects") ? "page" : undefined
+          pathname?.startsWith(`${root}/projects`) ? "page" : undefined
         }
       >
         Projects
       </Link>
-      <MessageNotifications role="operator" />
-      <Link href="/" className="public-nav">
-        <span aria-hidden="true">↗</span>Public portal
-      </Link>
+      <MessageNotifications role={role} />
+      {role === "operator" && (
+        <Link href="/" className="public-nav">
+          <span aria-hidden="true">↗</span>Public portal
+        </Link>
+      )}
     </nav>
   );
 }

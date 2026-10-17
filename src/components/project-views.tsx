@@ -61,7 +61,7 @@ export async function ProjectList({
           </Link>
         )}
       </div>
-      <form className="card search-toolbar" method="get">
+      <form className="card project-filter" method="get">
         <label>
           Status
           <select
@@ -86,7 +86,9 @@ export async function ProjectList({
               href={`${root}/${project.id}`}
               key={project.id}
             >
-              <span className="status-badge">{status(project.status)}</span>
+              <span className="status-badge" data-status={project.status}>
+                {status(project.status)}
+              </span>
               <h2>{project.name}</h2>
               {summary.conversations.find(
                 (item) => item.kind === "project" && item.id === project.id,
@@ -101,9 +103,11 @@ export async function ProjectList({
                   unread
                 </span>
               ) : null}
-              <p>{project.clientName}</p>
-              <p>{formatBudget(project.budget, project.currency)}</p>
-              <p>
+              <p className="project-client">{project.clientName}</p>
+              <p className="project-card-budget">
+                {formatBudget(project.budget, project.currency)}
+              </p>
+              <p className="field-help">
                 {project.approvedCount} of {project.milestoneCount} milestones
                 approved
               </p>
@@ -114,7 +118,9 @@ export async function ProjectList({
                   max={project.milestoneCount}
                 />
               )}
-              {project.dueDate && <p>Due {project.dueDate}</p>}
+              {project.dueDate && (
+                <p className="project-due">Due {project.dueDate}</p>
+              )}
             </Link>
           ))}
         </div>
@@ -146,16 +152,24 @@ export async function ProjectWorkspace({
   );
   return (
     <ProjectLive projectId={id}>
-      <Link href={operator ? "/dashboard/projects" : "/portal/projects"}>
+      <Link
+        className="back-link"
+        href={operator ? "/dashboard/projects" : "/portal/projects"}
+      >
         ← Projects
       </Link>
       <div className="page-heading">
         <div>
           <p className="eyebrow">Project workspace</p>
           <h1>{project.name}</h1>
-          <span className="status-badge">{status(project.status)}</span>
+          <span className="status-badge" data-status={project.status}>
+            {status(project.status)}
+          </span>
         </div>
-        <strong>{formatBudget(project.budget, project.currency)}</strong>
+        <div className="workspace-budget">
+          <span>Project budget</span>
+          <strong>{formatBudget(project.budget, project.currency)}</strong>
+        </div>
       </div>
       {project.status === "pending_lockin" && (
         <div className="card project-banner">
@@ -170,11 +184,13 @@ export async function ProjectWorkspace({
       {project.status === "paused" && (
         <p className="card">This project is paused.</p>
       )}
-      <section className="card">
-        <h2>Scope</h2>
-        <p className="preserve-lines">
-          {project.description || "No description added."}
-        </p>
+      <section className="card project-overview">
+        <div className="project-scope">
+          <h2>Scope</h2>
+          <p className="preserve-lines">
+            {project.description || "No description added."}
+          </p>
+        </div>
         <dl className="project-facts">
           <div>
             <dt>Start</dt>
@@ -196,9 +212,9 @@ export async function ProjectWorkspace({
             </dd>
           </div>
         </dl>
+        <ProjectActions project={project} operator={operator} />
       </section>
-      <ProjectActions project={project} operator={operator} />
-      <section aria-label="Project milestones">
+      <section className="project-section" aria-label="Project milestones">
         <div className="page-heading">
           <h2>Milestones</h2>
           <p>
@@ -212,10 +228,10 @@ export async function ProjectWorkspace({
         {project.milestones.length ? (
           <ol className="milestone-list">
             {project.milestones.map((milestone) => (
-              <li className="card" key={milestone.id}>
+              <li className="card milestone-card" key={milestone.id}>
                 <div className="page-heading">
                   <h3>{milestone.name}</h3>
-                  <span className="status-badge">
+                  <span className="status-badge" data-status={milestone.status}>
                     {status(milestone.status)}
                   </span>
                 </div>
@@ -254,8 +270,8 @@ export async function ProjectWorkspace({
         defaultCurrency={project.currency}
         maxBytes={readConfiguration().storage.maxBytes}
       />
-      <section className="card">
-        <h2>Project activity</h2>
+      <details className="card project-history">
+        <summary>Project activity</summary>
         <ol className="activity-list">
           {project.activity.map((item) => (
             <li key={item.id}>
@@ -272,7 +288,7 @@ export async function ProjectWorkspace({
             </li>
           ))}
         </ol>
-      </section>
+      </details>
     </ProjectLive>
   );
 }
@@ -287,15 +303,24 @@ export async function ProjectEditor({
   operatorOnly(actor);
   const project = id ? await detail(id, actor) : undefined;
   const clients = await getSql()<
-    { id: string; name: string }[]
-  >`select id,name from clients where deleted_at is null order by lower(name),id`;
+    { id: string; name: string; email: string }[]
+  >`select id,name,email from clients where deleted_at is null order by lower(name),id`;
   const branding = await getBranding();
   return (
     <>
-      <Link href={id ? `/dashboard/projects/${id}` : "/dashboard/projects"}>
+      <Link
+        className="back-link"
+        href={id ? `/dashboard/projects/${id}` : "/dashboard/projects"}
+      >
         ← Projects
       </Link>
-      <h1>{id ? "Edit project" : "New project"}</h1>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Project details</p>
+          <h1>{id ? "Edit project" : "New project"}</h1>
+          <p>Define the work, choose your clients and set the terms.</p>
+        </div>
+      </div>
       {clients.length ? (
         <ProjectForm
           key={id ?? "new"}

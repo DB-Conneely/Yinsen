@@ -16,6 +16,9 @@ export function BrandFrame({
       className="brand-frame"
       style={{ "--brand-colour": branding.brandColour } as CSSProperties}
     >
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <header className="brand-header">
         <Link href="/" className="brand-name">
           {branding.brandName}
@@ -26,7 +29,9 @@ export function BrandFrame({
         </div>
       </header>
       {children}
-      <footer>{branding.brandName} · Powered by Yinsen</footer>
+      <footer className="brand-footer">
+        {branding.brandName} <span>Powered by Yinsen</span>
+      </footer>
     </div>
   );
 }

@@ -24,8 +24,8 @@ export default function OperatorGuide(): ReactElement {
         are added alongside their usable features.
       </p>
       <p>
-        For commands and configuration details, open{" "}
-        <code>docs/operator.md</code> in your installation source.
+        For commands and configuration details, open <code>README.md</code> in
+        your installation source.
       </p>
       <a href="/setup">Back to setup</a>
     </main>

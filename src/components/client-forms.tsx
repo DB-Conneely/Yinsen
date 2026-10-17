@@ -236,7 +236,7 @@ export function ClientActions({
     }
   }
   return (
-    <section aria-label="Client actions">
+    <section className="client-actions" aria-label="Client actions">
       <div className="actions">
         {archived ? (
           <button
@@ -249,7 +249,10 @@ export function ClientActions({
           </button>
         ) : (
           <>
-            <a className="button" href={`/dashboard/clients/${id}/edit`}>
+            <a
+              className="button secondary"
+              href={`/dashboard/clients/${id}/edit`}
+            >
               Edit client
             </a>
             <button
@@ -263,7 +266,7 @@ export function ClientActions({
             <button
               ref={archive}
               disabled={pending}
-              className="secondary"
+              className="secondary archive-client"
               onClick={() => setConfirm(true)}
             >
               Archive client
@@ -273,6 +276,7 @@ export function ClientActions({
       </div>
       {confirm && (
         <div
+          className="confirmation"
           role="group"
           aria-label="Archive client confirmation"
           onKeyDown={(event) => {
@@ -302,7 +306,7 @@ export function ClientActions({
         </div>
       )}
       {url && (
-        <div className="card">
+        <div className="login-link-result">
           <label htmlFor="login-link">
             Single-use login link · expires in 24 hours
           </label>

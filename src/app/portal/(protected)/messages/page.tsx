@@ -24,41 +24,53 @@ export default async function MessagesPage(): Promise<ReactElement> {
           </p>
         </div>
       </div>
-      <MessageThread
-        key={actor.id}
-        conversation={{ kind: "client", id: actor.id }}
-        actorId={actor.id}
-        defaultCurrency={(await getBranding())?.defaultCurrency ?? "GBP"}
-        maxBytes={readConfiguration().storage.maxBytes}
-      />
-      <section className="card">
-        <h2>Project chats</h2>
-        {summary.conversations.some((item) => item.kind === "project") ? (
-          <ul className="conversation-list">
-            {summary.conversations
-              .filter((item) => item.kind === "project")
-              .map((item) => (
-                <li key={item.id}>
-                  <Link href={`/portal/projects/${item.id}#messages`}>
-                    {item.name}
-                  </Link>
-                  {item.unread > 0 && (
-                    <span className="unread-badge">{item.unread} unread</span>
-                  )}
-                  <p>
-                    {item.lastBody
-                      ? item.lastBody.slice(0, 140)
-                      : item.lastAt
-                        ? "Attachment"
-                        : "No messages yet."}
-                  </p>
-                </li>
-              ))}
-          </ul>
-        ) : (
-          <p>No project chats yet.</p>
-        )}
-      </section>
+      <div className="conversation-workspace">
+        <div className="conversation-primary">
+          <MessageThread
+            key={actor.id}
+            conversation={{ kind: "client", id: actor.id }}
+            actorId={actor.id}
+            defaultCurrency={(await getBranding())?.defaultCurrency ?? "GBP"}
+            maxBytes={readConfiguration().storage.maxBytes}
+          />
+        </div>
+        <aside className="workspace-context" aria-label="Project conversations">
+          <section className="card context-card">
+            <h2>Project chats</h2>
+            <p className="field-help">
+              Keep project-specific conversations with their shared work.
+            </p>
+            {summary.conversations.some((item) => item.kind === "project") ? (
+              <ul className="conversation-list">
+                {summary.conversations
+                  .filter((item) => item.kind === "project")
+                  .map((item) => (
+                    <li key={item.id}>
+                      <Link href={`/portal/projects/${item.id}#messages`}>
+                        <span>{item.name}</span>
+                        <span aria-hidden="true">↗</span>
+                      </Link>
+                      {item.unread > 0 && (
+                        <span className="unread-badge">
+                          {item.unread} unread
+                        </span>
+                      )}
+                      <p>
+                        {item.lastBody
+                          ? item.lastBody.slice(0, 140)
+                          : item.lastAt
+                            ? "Attachment"
+                            : "No messages yet."}
+                      </p>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p>No project chats yet.</p>
+            )}
+          </section>
+        </aside>
+      </div>
     </ProjectLive>
   );
 }

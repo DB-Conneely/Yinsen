@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { z } from "zod";
 import { AppError } from "../lib/errors";
 import type { ConversationSummary } from "../lib/messages/queries";
@@ -26,6 +27,7 @@ export function MessageNotifications({
 }: {
   role: "operator" | "client";
 }): ReactElement {
+  const pathname = usePathname();
   const [summary, setSummary] = useState<{
     total: number;
     conversations: ConversationSummary[];
@@ -88,7 +90,10 @@ export function MessageNotifications({
   return (
     <div className="message-notifications">
       {role === "client" && (
-        <Link href="/portal/messages">
+        <Link
+          href="/portal/messages"
+          aria-current={pathname === "/portal/messages" ? "page" : undefined}
+        >
           Messages
           {summary.total > 0 && (
             <span className="unread-badge">{summary.total} unread</span>

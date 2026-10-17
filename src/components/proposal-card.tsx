@@ -141,40 +141,50 @@ export function ProposalCard({
             : "Proposal declined"
       }
     >
-      <p className="eyebrow">
-        {message.type === "counter"
-          ? "Counter-proposal"
-          : message.type === "proposal"
-            ? "Project proposal"
-            : message.type === "accept"
-              ? "Proposal accepted"
-              : "Proposal declined"}
-      </p>
+      <div className="proposal-heading">
+        <p className="eyebrow">
+          {message.type === "counter"
+            ? "Counter-proposal"
+            : message.type === "proposal"
+              ? "Project proposal"
+              : message.type === "accept"
+                ? "Proposal accepted"
+                : "Proposal declined"}
+        </p>
+        <span className="status-badge" data-status={proposal.state}>
+          {state}
+        </span>
+      </div>
       {terms && (
         <>
           <h3>{terms.name}</h3>
           <p className="preserve-lines">{terms.description}</p>
-          <p>
+          <div className="proposal-budget">
+            <span>Project budget</span>
             <strong>
               {formatBudget(terms.budget, terms.currency)} {terms.currency}
             </strong>
-          </p>
+          </div>
           {terms.milestones.length > 0 && (
-            <ol>
-              {terms.milestones.map((item, index) => (
-                <li key={index}>
-                  <strong>{item.name}</strong>
-                  <p className="preserve-lines">{item.description}</p>
-                  {item.dueDate && (
-                    <time dateTime={item.dueDate}>Due {item.dueDate}</time>
-                  )}
-                </li>
-              ))}
-            </ol>
+            <div className="proposal-milestones">
+              <h4>
+                Milestones <span>{terms.milestones.length}</span>
+              </h4>
+              <ol>
+                {terms.milestones.map((item, index) => (
+                  <li key={index}>
+                    <strong>{item.name}</strong>
+                    <p className="preserve-lines">{item.description}</p>
+                    {item.dueDate && (
+                      <time dateTime={item.dueDate}>Due {item.dueDate}</time>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
         </>
       )}
-      <p className="status-badge">{state}</p>
       {proposal.projectId && (
         <a
           className="button secondary"

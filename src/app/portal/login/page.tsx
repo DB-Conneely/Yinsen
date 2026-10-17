@@ -15,7 +15,7 @@ export default async function ClientLogin(): Promise<ReactElement> {
   if (!branding) redirect("/setup");
   return (
     <BrandFrame branding={branding}>
-      <main className="card narrow">
+      <main className="card narrow" id="main-content">
         <h1>Client login</h1>
         <p>Contact {branding.brandName} for a login link.</p>
         {readConfiguration().email && <ClientLoginForm />}

@@ -216,6 +216,7 @@ export function MilestoneActions({
       </div>
       {deleting && (
         <div
+          className="confirmation"
           role="group"
           aria-label={`Delete ${milestone.name}?`}
           onKeyDown={(event) => {

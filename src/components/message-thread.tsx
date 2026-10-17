@@ -145,9 +145,9 @@ function MessageBubble({
     <article
       id={`message-${message.id}`}
       tabIndex={-1}
-      className={`message-bubble ${message.senderId === actorId ? "message-own" : ""}`}
+      className={`message-bubble ${message.senderId === actorId ? "message-own" : ""} ${message.proposal ? "message-proposal" : ""}`}
     >
-      <header>
+      <header className="message-meta">
         <strong>{message.senderName}</strong>
         <time dateTime={message.createdAt}>
           {new Date(message.createdAt).toLocaleString("en-GB", {
@@ -156,7 +156,9 @@ function MessageBubble({
           UTC
         </time>
       </header>
-      {message.body && <p className="preserve-lines">{message.body}</p>}
+      {message.body && !message.proposal && (
+        <p className="preserve-lines">{message.body}</p>
+      )}
       <ProposalCard
         message={message}
         operator={operator}
@@ -164,15 +166,21 @@ function MessageBubble({
         onSaved={onSaved}
       />
       {message.attachments.length > 0 && (
-        <ul className="attachment-list">
+        <ul className="attachment-list message-downloads">
           {message.attachments.map((file) => (
             <li key={file.id}>
               <a
+                aria-label={file.filename}
                 href={`/api/messages/${message.id}/attachments/${file.id}/download`}
               >
-                {file.filename}
-              </a>{" "}
-              <small>{Math.ceil(file.size / 1024)} KB</small>
+                <span className="attachment-icon" aria-hidden="true">
+                  ↓
+                </span>
+                <span className="attachment-name">
+                  {file.filename}
+                  <small>{Math.ceil(file.size / 1024)} KB · Download</small>
+                </span>
+              </a>
             </li>
           ))}
         </ul>
@@ -258,6 +266,7 @@ function MessageComposer({
       <label>
         Message
         <textarea
+          placeholder="Write a message…"
           maxLength={4000}
           value={body}
           disabled={pending}
@@ -267,27 +276,33 @@ function MessageComposer({
           }}
         />
       </label>
-      <label>
-        Attachments
-        <input
-          ref={picker}
-          type="file"
-          multiple
-          disabled={pending}
-          accept=".txt,.md,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.zip,.docx,.xlsx,.pptx"
-          onChange={(event) => {
-            changed();
-            setFiles([...files, ...Array.from(event.target.files ?? [])]);
-            event.target.value = "";
-          }}
-        />
-      </label>
-      <p className="field-help">
+      <div className="composer-tools">
+        <label className="attachment-picker">
+          Attachments
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            disabled={pending}
+            accept=".txt,.md,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.zip,.docx,.xlsx,.pptx"
+            onChange={(event) => {
+              changed();
+              setFiles([...files, ...Array.from(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        <button disabled={pending}>
+          {pending ? "Sending…" : "Send message"}
+          <span aria-hidden="true">↗</span>
+        </button>
+      </div>
+      <p className="field-help attachment-help">
         Up to 5 files, {maxBytes / 1024 / 1024} MB each. Documents, text, images
         and ZIP files. Attachments are private to this conversation.
       </p>
       {files.length > 0 && (
-        <ul className="attachment-list">
+        <ul className="attachment-list selected-attachments">
           {files.map((file, index) => (
             <li key={`${index}-${file.name}`}>
               <span>{file.name}</span>{" "}
@@ -307,9 +322,6 @@ function MessageComposer({
         </ul>
       )}
       <p role="alert">{error}</p>
-      <button disabled={pending}>
-        {pending ? "Sending…" : "Send message"}
-      </button>
     </form>
   );
 }
@@ -483,9 +495,9 @@ export function MessageThread({
       ref={root}
       aria-label="Conversation"
     >
-      <div className="page-heading">
+      <div className="thread-heading">
         <div>
-          <p className="eyebrow">Conversation</p>
+          <p className="eyebrow">Private conversation</p>
           <h2>
             {conversation.kind === "client"
               ? "General messages"
@@ -504,7 +516,7 @@ export function MessageThread({
       </div>
       <form
         role="search"
-        className="search-toolbar"
+        className="message-search"
         onSubmit={(event) => {
           event.preventDefault();
           const value = new FormData(event.currentTarget).get("search");
@@ -520,6 +532,8 @@ export function MessageThread({
         <label>
           Search messages
           <input
+            type="search"
+            placeholder="Find a message"
             ref={searchInput}
             name="search"
             maxLength={100}
@@ -540,7 +554,12 @@ export function MessageThread({
           Load earlier messages
         </button>
       )}
-      <p role="status" data-proposal-feedback tabIndex={-1}>
+      <p
+        className="thread-status"
+        role="status"
+        data-proposal-feedback
+        tabIndex={-1}
+      >
         {loading
           ? "Loading messages…"
           : page.messages.length
