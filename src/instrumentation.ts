@@ -7,9 +7,11 @@ export async function register(): Promise<void> {
     const { checkDatabase } = await import("./lib/db/health");
     const { logger } = await import("./lib/logger");
     const { AppError } = await import("./lib/errors");
+    const { startAccessCleanup } = await import("./lib/cleanup");
     try {
       readConfiguration();
       await checkDatabase();
+      await startAccessCleanup();
       logger.info(
         { event: "startup.ready" },
         "Configuration and database schema verified",

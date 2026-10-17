@@ -15,6 +15,13 @@
       "when": 1792197036095,
       "tag": "0001_adorable_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792198681395,
+      "tag": "0002_magical_skin",
+      "breakpoints": true
     }
   ]
 }

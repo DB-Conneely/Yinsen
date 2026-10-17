@@ -80,7 +80,11 @@ export function LoginForm(): ReactElement {
   );
 }
 
-export function LogoutButton(): ReactElement {
+export function LogoutButton({
+  destination = "/login",
+}: {
+  destination?: string;
+}): ReactElement {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -89,7 +93,7 @@ export function LogoutButton(): ReactElement {
     setError("");
     try {
       await submitJson("/api/auth/logout", {});
-      router.replace("/login");
+      router.replace(destination);
       router.refresh();
     } catch (failure: unknown) {
       setError(

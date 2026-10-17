@@ -21,9 +21,8 @@ export default async function DashboardLayout({
       <div className="dashboard">
         <aside aria-label="Operator navigation">
           <nav>
-            <Link href="/dashboard" aria-current="page">
-              Overview
-            </Link>
+            <Link href="/dashboard">Overview</Link>
+            <Link href="/dashboard/clients">Clients</Link>
             <Link href="/">Public portal</Link>
           </nav>
           <p>{identity.name}</p>

@@ -142,10 +142,12 @@ function Integrations({
   status,
   verify,
   pending,
+  email,
 }: {
   status: string;
   verify: () => void;
   pending: boolean;
+  email: string;
 }): ReactElement {
   return (
     <section>
@@ -154,6 +156,11 @@ function Integrations({
         Infrastructure is configured by the server environment. Credentials are
         never collected here.
       </p>
+      <p>
+        If email is configured, Verify installation submits a test to Resend’s
+        fixed test address, using account quota. Provider acceptance does not
+        prove inbox delivery.
+      </p>
       <ul className="integration-list">
         <li>
           <strong>Database</strong>
@@ -161,7 +168,7 @@ function Integrations({
         </li>
         <li>
           <strong>Email</strong>
-          <span>Skipped · no service configured</span>
+          <span>{email || "Not checked"}</span>
         </li>
         <li>
           <strong>Payments</strong>
@@ -195,6 +202,7 @@ function useWizard(): {
   error: string;
   pending: boolean;
   status: string;
+  email: string;
   submit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   back: () => void;
   verify: () => Promise<void>;
@@ -209,14 +217,24 @@ function useWizard(): {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState("");
+  const [email, setEmail] = useState("");
   async function verify(): Promise<void> {
     setPending(true);
     setError("");
     try {
-      const response = await fetch("/api/setup", { cache: "no-store" });
+      const response = await fetch("/api/setup/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       const result = z
         .object({
-          data: z.object({ database: z.literal("configured") }).nullable(),
+          data: z
+            .object({
+              database: z.literal("configured"),
+              email: z.enum(["accepted", "skipped", "failed"]),
+            })
+            .nullable(),
         })
         .parse(await response.json());
       if (!response.ok || !result.data)
@@ -224,6 +242,19 @@ function useWizard(): {
           503,
           "VERIFY_FAILED",
           "Verification failed. Check the database and operator instructions.",
+        );
+      setEmail(
+        result.data.email === "accepted"
+          ? "Configured · provider accepted test (inbox delivery unverified)"
+          : result.data.email === "skipped"
+            ? "Skipped · manual login links available"
+            : "Failed · check Resend key and sender",
+      );
+      if (result.data.email === "failed")
+        throw new AppError(
+          503,
+          "VERIFY_FAILED",
+          "Email verification failed. Check Resend configuration in the operator instructions.",
         );
       setStatus("Configured · connection verified");
     } catch (failure: unknown) {
@@ -282,6 +313,7 @@ function useWizard(): {
     error,
     pending,
     status,
+    email,
     submit,
     back: () => {
       setStep(step - 1);
@@ -320,7 +352,7 @@ export function SetupWizard(): ReactElement {
           <h2>{wizard.value.brandName} is ready</h2>
           <p>
             Your operator account and {wizard.value.defaultCurrency} defaults
-            are saved. Database verified; optional services skipped.
+            are saved. Database verified. Email: {wizard.email}.
           </p>
           <a href="/dashboard" className="button">
             Go to dashboard
@@ -339,6 +371,7 @@ export function SetupWizard(): ReactElement {
           {wizard.step === 2 && (
             <Integrations
               status={wizard.status}
+              email={wizard.email}
               pending={wizard.pending}
               verify={() => {
                 void wizard.verify();

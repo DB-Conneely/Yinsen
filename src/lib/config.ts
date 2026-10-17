@@ -5,12 +5,24 @@ const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
   APP_ORIGIN: z.url(),
   DATABASE_SSL: z.enum(["disable", "verify-full"]).default("verify-full"),
+  RESEND_API_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .regex(/^re_[A-Za-z0-9_-]+$/)
+      .optional(),
+  ),
+  EMAIL_FROM_ADDRESS: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.email().max(254).toLowerCase().optional(),
+  ),
 });
 
 export type Configuration = {
   databaseUrl: string;
   origin: string;
   ssl: false | { rejectUnauthorized: true };
+  email?: { key: string; from: string };
 };
 
 export function databaseConnection(
@@ -61,6 +73,11 @@ export function readConfiguration(
     );
   }
   const origin = new URL(result.data.APP_ORIGIN);
+  const { RESEND_API_KEY: key, EMAIL_FROM_ADDRESS: from } = result.data;
+  if ((key || from) && !(key && from))
+    throw new ConfigurationError(
+      "Set RESEND_API_KEY and EMAIL_FROM_ADDRESS together, or omit both. See .env.example.",
+    );
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
   if (
     origin.username ||
@@ -77,5 +94,6 @@ export function readConfiguration(
   return {
     ...databaseConnection(result.data.DATABASE_URL, result.data.DATABASE_SSL),
     origin: origin.origin,
+    ...(key && from ? { email: { key, from } } : {}),
   };
 }

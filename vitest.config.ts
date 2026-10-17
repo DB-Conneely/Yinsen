@@ -5,5 +5,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     environment: "node",
     setupFiles: ["tests/fixture.ts"],
+    fileParallelism: false,
+    maxWorkers: 1,
   },
 });

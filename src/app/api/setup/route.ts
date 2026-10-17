@@ -3,6 +3,7 @@ import { completeSetup, isSetupComplete } from "../../../lib/setup/service";
 import { sessionCookie } from "../../../lib/auth/session";
 import { checkDatabase } from "../../../lib/db/health";
 import { AppError } from "../../../lib/errors";
+import { readConfiguration } from "../../../lib/config";
 
 export async function GET(): Promise<Response> {
   return apiResponse(async () => {
@@ -11,7 +12,7 @@ export async function GET(): Promise<Response> {
     await checkDatabase();
     return {
       database: "configured",
-      email: "skipped",
+      email: readConfiguration().email ? "configured_unverified" : "skipped",
       payments: "skipped",
       storage: "skipped",
     };

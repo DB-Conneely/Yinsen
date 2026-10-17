@@ -38,6 +38,8 @@ services:
       DATABASE_URL: postgresql://yinsen_runtime:${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}@postgres:5432/yinsen
       DATABASE_SSL: disable
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     depends_on:
