@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { Message, MessagePage } from "../lib/messages/queries";
+import { proposalAction } from "../lib/messages/proposal-validators";
 import { ProposalEditor } from "./proposal-editor";
 import { formatBudget } from "../lib/money";
 
@@ -69,10 +70,12 @@ export function ProposalCard({
   message,
   operator,
   submitAction,
+  onSaved,
 }: {
   message: Message;
   operator: boolean;
   submitAction: (input: unknown) => Promise<MessagePage>;
+  onSaved: (requestId: string) => void;
 }): ReactElement | null {
   const [mode, setMode] = useState<"accept" | "reject" | "counter" | null>(
     null,
@@ -93,14 +96,16 @@ export function ProposalCard({
         : proposal.canRespond
           ? "awaiting your response"
           : "awaiting the other party";
-  function dismiss(): void {
+  function dismiss(confirmedId?: string): void {
     setMode(null);
     setError("");
     requestId.current = "";
-    requestAnimationFrame(() => {
-      if (trigger.current?.disabled) root.current?.focus();
-      else trigger.current?.focus();
-    });
+    if (confirmedId) onSaved(confirmedId);
+    else
+      requestAnimationFrame(() => {
+        if (trigger.current?.disabled) root.current?.focus();
+        else trigger.current?.focus();
+      });
   }
   async function respond(type: "accept" | "reject"): Promise<void> {
     requestId.current ||= crypto.randomUUID();
@@ -112,7 +117,7 @@ export function ProposalCard({
         requestId: requestId.current,
         proposalId: message.id,
       });
-      dismiss();
+      dismiss(requestId.current);
     } catch (failure: unknown) {
       setError(
         failure instanceof Error
@@ -207,10 +212,10 @@ export function ProposalCard({
           proposalId={message.id}
           submitAction={async (input) => {
             const result = await submitAction(input);
-            dismiss();
+            dismiss(proposalAction.parse(input).requestId);
             return result;
           }}
-          onCancel={dismiss}
+          onCancel={() => dismiss()}
         />
       )}
       {(mode === "accept" || mode === "reject") && (
@@ -218,7 +223,7 @@ export function ProposalCard({
           type={mode}
           pending={pending}
           error={error}
-          onCancel={dismiss}
+          onCancel={() => dismiss()}
           onConfirm={() => {
             void respond(mode);
           }}

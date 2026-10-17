@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
@@ -11,7 +12,10 @@ import { z } from "zod";
 import { AppError } from "../lib/errors";
 import type { Conversation } from "../lib/messages/access";
 import type { Message, MessagePage } from "../lib/messages/queries";
-import { proposalView } from "../lib/messages/proposal-validators";
+import {
+  proposalAction as proposalActionSchema,
+  proposalView,
+} from "../lib/messages/proposal-validators";
 import { ProposalCard } from "./proposal-card";
 import { ProposalEditor } from "./proposal-editor";
 
@@ -129,14 +133,18 @@ function MessageBubble({
   actorId,
   operator,
   submitAction,
+  onSaved,
 }: {
   message: Message;
   actorId: string;
   operator: boolean;
   submitAction: (input: unknown) => Promise<MessagePage>;
+  onSaved: (requestId: string) => void;
 }): ReactElement {
   return (
     <article
+      id={`message-${message.id}`}
+      tabIndex={-1}
       className={`message-bubble ${message.senderId === actorId ? "message-own" : ""}`}
     >
       <header>
@@ -153,6 +161,7 @@ function MessageBubble({
         message={message}
         operator={operator}
         submitAction={submitAction}
+        onSaved={onSaved}
       />
       {message.attachments.length > 0 && (
         <ul className="attachment-list">
@@ -326,6 +335,9 @@ export function MessageThread({
   const searchInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [savedProposalId, setSavedProposalId] = useState("");
+  const [focusRequest, setFocusRequest] = useState<{ id: string } | null>(null);
+  const focusedRequest = useRef<{ id: string } | null>(null);
   const [proposing, setProposing] = useState(false);
   const proposeTrigger = useRef<HTMLButtonElement>(null);
   const loadedFrom = useRef<string | undefined>(undefined);
@@ -336,6 +348,27 @@ export function MessageThread({
   const endpoint = `/api/${conversation.kind === "client" ? "clients" : "projects"}/${conversation.id}/messages`;
   const reads = useVisibleReads(conversation, page.messages, root);
   const lastMessageId = page.messages.at(-1)?.id;
+  const proposalFeedback = savedProposalId
+    ? `Proposal response saved.${
+        page.hasEarlier &&
+        !page.messages.some((message) => message.id === savedProposalId)
+          ? " Use Load earlier messages to view it."
+          : ""
+      }`
+    : "";
+  useLayoutEffect(() => {
+    if (!focusRequest || focusedRequest.current === focusRequest) return;
+    const message = document.getElementById(`message-${focusRequest.id}`);
+    const target =
+      message ??
+      (savedProposalId === focusRequest.id
+        ? root.current?.querySelector<HTMLElement>("[data-proposal-feedback]")
+        : null);
+    if (!target) return;
+    focusedRequest.current = focusRequest;
+    target.scrollIntoView({ block: message ? "start" : "center" });
+    target.focus({ preventScroll: true });
+  }, [focusRequest, page.messages, savedProposalId]);
   useEffect(() => {
     if (follow.current && list.current)
       list.current.scrollTop = list.current.scrollHeight;
@@ -406,33 +439,42 @@ export function MessageThread({
       window.removeEventListener("yinsen:refresh", refresh);
     };
   }, [load]);
-  const sent = (result: MessagePage): void => {
+  const sent = (result: MessagePage, scrollToEnd = true): void => {
     generation.current++;
+    setSavedProposalId("");
     setSearch("");
     if (searchInput.current) searchInput.current.value = "";
     setPage(result);
     setLoading(false);
     setError("");
     loadedFrom.current = result.messages[0]?.position;
-    requestAnimationFrame(() => {
-      if (list.current) list.current.scrollTop = list.current.scrollHeight;
-    });
+    if (scrollToEnd)
+      requestAnimationFrame(() => {
+        if (list.current) list.current.scrollTop = list.current.scrollHeight;
+      });
   };
   const proposalAction = async (input: unknown): Promise<MessagePage> => {
+    const action = proposalActionSchema.parse(input);
+    setSavedProposalId("");
     const result = await responsePage(
       await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        body: JSON.stringify(action),
       }),
     );
-    sent(result);
+    follow.current = false;
+    sent(result, false);
+    if (!result.messages.some((message) => message.id === action.requestId))
+      setSavedProposalId(action.requestId);
     window.dispatchEvent(new Event("yinsen:unread"));
     return result;
   };
-  const closeProposal = (): void => {
+  const saved = (requestId: string): void => setFocusRequest({ id: requestId });
+  const closeProposal = (requestId?: string): void => {
     setProposing(false);
-    requestAnimationFrame(() => proposeTrigger.current?.focus());
+    if (requestId) saved(requestId);
+    else requestAnimationFrame(() => proposeTrigger.current?.focus());
   };
   return (
     <section
@@ -467,6 +509,7 @@ export function MessageThread({
           event.preventDefault();
           const value = new FormData(event.currentTarget).get("search");
           const next = typeof value === "string" ? value : "";
+          setSavedProposalId("");
           setLoading(true);
           setPage({ messages: [], hasEarlier: false });
           loadedFrom.current = undefined;
@@ -497,11 +540,11 @@ export function MessageThread({
           Load earlier messages
         </button>
       )}
-      <p role="status">
+      <p role="status" data-proposal-feedback tabIndex={-1}>
         {loading
           ? "Loading messages…"
           : page.messages.length
-            ? ""
+            ? proposalFeedback
             : search
               ? "No matching messages."
               : "No messages yet. Start the conversation below."}
@@ -535,6 +578,7 @@ export function MessageThread({
             actorId={actorId}
             operator={operator}
             submitAction={proposalAction}
+            onSaved={saved}
           />
         ))}
       </div>
@@ -558,10 +602,10 @@ export function MessageThread({
           }}
           submitAction={async (input) => {
             const result = await proposalAction(input);
-            closeProposal();
+            closeProposal(proposalActionSchema.parse(input).requestId);
             return result;
           }}
-          onCancel={closeProposal}
+          onCancel={() => closeProposal()}
         />
       )}
     </section>
