@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { Message, MessagePage } from "../lib/messages/queries";
 import { ProposalEditor } from "./proposal-editor";
+import { formatBudget } from "../lib/money";
 
 function ProposalConfirmation({
   type,
@@ -150,7 +151,7 @@ export function ProposalCard({
           <p className="preserve-lines">{terms.description}</p>
           <p>
             <strong>
-              {terms.budget} {terms.currency} minor units
+              {formatBudget(terms.budget, terms.currency)} {terms.currency}
             </strong>
           </p>
           {terms.milestones.length > 0 && (

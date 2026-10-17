@@ -11,6 +11,7 @@ import {
   type ProposalTerms,
 } from "../lib/messages/proposal-validators";
 import type { MessagePage } from "../lib/messages/queries";
+import { minorAmount, budgetInput } from "../lib/money";
 
 export function ProposalEditor({
   initial,
@@ -25,7 +26,7 @@ export function ProposalEditor({
 }): ReactElement {
   const [terms, setTerms] = useState<ProposalTerms>(initial);
   const [amount, setAmount] = useState(
-    proposalId ? String(initial.budget) : "",
+    proposalId ? budgetInput(initial.budget, initial.currency) : "",
   );
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -55,13 +56,22 @@ export function ProposalEditor({
   }
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    let budget: number | null;
+    try {
+      budget = minorAmount(amount, terms.currency);
+    } catch (failure: unknown) {
+      setError(
+        failure instanceof Error ? failure.message : "Enter a valid budget.",
+      );
+      return;
+    }
     const parsed = proposalTerms.safeParse({
       ...terms,
-      budget: /^[0-9]+$/.test(amount) ? Number(amount) : NaN,
+      budget,
     });
     if (!parsed.success) {
       setError(
-        "Enter a project name, a whole-number budget from 0 to 2147483647 in minor units, a three-letter currency and valid milestone terms/dates.",
+        "Enter a project name, budget, three-letter currency and valid milestone terms/dates.",
       );
       return;
     }
@@ -136,9 +146,9 @@ export function ProposalEditor({
           </label>
           <div className="form-grid">
             <label>
-              Budget in minor units
+              Budget
               <input
-                inputMode="numeric"
+                inputMode="decimal"
                 required
                 value={amount}
                 onChange={(event) => {
@@ -147,7 +157,7 @@ export function ProposalEditor({
                 }}
               />
               <small>
-                For example, 12345 means GBP 123.45. Enter a whole number.
+                Enter an amount in the selected currency, for example 125.00.
               </small>
             </label>
             <label>

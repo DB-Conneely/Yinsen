@@ -18,19 +18,10 @@ import { projectStatus } from "../lib/projects/validation";
 import { MessageThread } from "./message-thread";
 import { readConfiguration } from "../lib/config";
 import { messageSummary } from "../lib/messages/queries";
+import { formatBudget } from "../lib/money";
 
 function status(value: string): string {
   return value.replaceAll("_", " ");
-}
-function budget(amount: number | null, currency: string): string {
-  if (amount === null) return "Budget not set";
-  const formatter = new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency,
-  });
-  return formatter.format(
-    amount / 10 ** (formatter.resolvedOptions().maximumFractionDigits ?? 2),
-  );
 }
 async function detail(id: string, actor: ProjectActor): Promise<ProjectDetail> {
   try {
@@ -111,7 +102,7 @@ export async function ProjectList({
                 </span>
               ) : null}
               <p>{project.clientName}</p>
-              <p>{budget(project.budget, project.currency)}</p>
+              <p>{formatBudget(project.budget, project.currency)}</p>
               <p>
                 {project.approvedCount} of {project.milestoneCount} milestones
                 approved
@@ -164,7 +155,7 @@ export async function ProjectWorkspace({
           <h1>{project.name}</h1>
           <span className="status-badge">{status(project.status)}</span>
         </div>
-        <strong>{budget(project.budget, project.currency)}</strong>
+        <strong>{formatBudget(project.budget, project.currency)}</strong>
       </div>
       {project.status === "pending_lockin" && (
         <div className="card project-banner">

@@ -4,39 +4,7 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { clientRequest } from "./client-forms";
 import type { ProjectDetail } from "../lib/projects/queries";
-import { AppError } from "../lib/errors";
-
-function currencyDigits(currency: string): number {
-  return (
-    new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency,
-    }).resolvedOptions().maximumFractionDigits ?? 2
-  );
-}
-function minorAmount(value: string, currency: string): number | null {
-  if (!value) return null;
-  const digits = currencyDigits(currency);
-  const pattern = digits
-    ? new RegExp(`^\\d+(?:\\.\\d{1,${digits}})?$`)
-    : /^\d+$/;
-  if (!pattern.test(value))
-    throw new AppError(
-      400,
-      "INVALID_AMOUNT",
-      `Enter a budget with at most ${digits} decimal places for ${currency}.`,
-    );
-  const [whole = "0", fraction = ""] = value.split(".");
-  const amount =
-    Number(whole) * 10 ** digits + Number(fraction.padEnd(digits, "0"));
-  if (!Number.isSafeInteger(amount) || amount > 2147483647)
-    throw new AppError(
-      400,
-      "INVALID_AMOUNT",
-      "This budget is too large. Enter a smaller amount.",
-    );
-  return amount;
-}
+import { minorAmount, budgetInput } from "../lib/money";
 
 export function ProjectForm({
   project,
@@ -168,11 +136,10 @@ export function ProjectForm({
         id="project-budget"
         name="budget"
         inputMode="decimal"
-        defaultValue={
-          project?.budget === null || project?.budget === undefined
-            ? ""
-            : project.budget / 10 ** currencyDigits(project.currency)
-        }
+        defaultValue={budgetInput(
+          project?.budget ?? null,
+          project?.currency ?? currency,
+        )}
       />
       <p className="hint">
         Enter an amount in the selected currency, for example 125.00.

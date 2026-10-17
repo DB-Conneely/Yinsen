@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import { getSql } from "../db/client";
+import { formatBudget } from "../money";
 import { AppError } from "../errors";
 import { publishConversation, publishProject } from "../events/hub";
 import { writeProject } from "../projects/service";
@@ -48,7 +49,7 @@ function recordFor(action: ProposalAction, target?: Target): MessageRecord {
     replyTo: target?.id ?? null,
     proposalData: terms,
     body: terms
-      ? `${action.type === "proposal" ? "Proposed project" : "Counter-proposal"}: ${terms.name} — ${terms.budget} ${terms.currency} minor units`
+      ? `${action.type === "proposal" ? "Proposed project" : "Counter-proposal"}: ${terms.name} — ${formatBudget(terms.budget, terms.currency)} ${terms.currency}`
       : action.type === "accept"
         ? "Proposal accepted. The agreed project is active."
         : "Proposal declined.",
