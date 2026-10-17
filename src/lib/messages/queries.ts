@@ -3,6 +3,7 @@ import type postgres from "postgres";
 import { getSql } from "../db/client";
 import type { ProjectActor } from "../projects/access";
 import { conversationAccess, type Conversation } from "./access";
+import { proposalTerms, type ProposalView } from "./proposal-validators";
 
 export type Attachment = {
   id: string;
@@ -21,6 +22,8 @@ export type Message = {
   createdAt: string;
   read: boolean;
   attachments: Attachment[];
+  type: "message" | "proposal" | "counter" | "accept" | "reject";
+  proposal: ProposalView | null;
 };
 export type MessagePage = { messages: Message[]; hasEarlier: boolean };
 const filters = z
@@ -52,12 +55,34 @@ export async function messageRows(
   const hasEarlier = rows.length > filter.limit;
   const page = rows.slice(0, filter.limit).reverse();
   if (!page.length) return { messages: [], hasEarlier };
+  const proposals = await sql<
+    (Omit<ProposalView, "terms"> & {
+      messageId: string;
+      terms: string | null;
+    })[]
+  >`select m.id as "messageId",m.chain_id as "chainId",m.reply_to as "replyTo",m.proposal_data::text as terms,case when latest.type in ('accept','reject') then latest.reply_to else latest.id end as "latestId",case when latest.type='accept' then 'accepted' when latest.type='reject' then 'rejected' else 'pending' end as state,p.id as "projectId",(m.id=latest.id and m.sender_id<>${actor.id} and m.sender_type<>${actor.role} and m.type in ('proposal','counter')) as "canRespond" from messages m join lateral (select id,type,reply_to from messages where chain_id=m.chain_id order by position desc limit 1) latest on true left join projects p on latest.type='accept' and p.proposal_message_id=latest.reply_to where m.id in ${sql(page.map((row) => row.id))} and m.type<>'message'`;
+  const types = await sql<
+    { id: string; type: Message["type"] }[]
+  >`select id,type from messages where id in ${sql(page.map((row) => row.id))}`;
   const attachments = await sql<
     (Attachment & { messageId: string })[]
   >`select id,message_id as "messageId",filename,size::float8 as size,mime_type as "mimeType",sha256 from message_attachments where message_id in ${sql(page.map((row) => row.id))} order by id`;
   return {
     messages: page.map((row) => ({
       ...row,
+      type: types.find((item) => item.id === row.id)?.type ?? "message",
+      proposal: (() => {
+        const proposal = proposals.find((item) => item.messageId === row.id);
+        if (!proposal) return null;
+        const { messageId: _messageId, ...view } = proposal;
+        return {
+          ...view,
+          terms:
+            view.terms === null
+              ? null
+              : proposalTerms.parse(JSON.parse(view.terms) as unknown),
+        };
+      })(),
       attachments: attachments
         .filter((file) => file.messageId === row.id)
         .map(({ messageId: _messageId, ...file }) => file),

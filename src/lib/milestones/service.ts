@@ -39,18 +39,9 @@ export async function createMilestone(
   actor: ProjectActor,
 ): Promise<ProjectDetail> {
   operatorOnly(actor);
-  const fields = milestoneFields.parse(input);
   const project = await getSql().begin(async (sql) => {
     await lockProject(sql, projectId, actor);
-    const current = await getProject(projectId, actor, sql);
-    if (current.milestones.length >= 200)
-      throw new AppError(
-        409,
-        "MILESTONE_LIMIT",
-        "Use at most 200 milestones per project.",
-      );
-    await sql`insert into milestones(project_id,name,description,due_date,position) values (${projectId},${fields.name},${fields.description},${fields.dueDate},${current.milestones.length})`;
-    await projectActivity(sql, projectId, actor, "milestone.created");
+    await writeMilestone(sql, projectId, input, actor);
     return getProject(projectId, actor, sql);
   });
   publishProject(
@@ -58,6 +49,26 @@ export async function createMilestone(
     project.members.map((member) => member.id),
   );
   return project;
+}
+
+// Consumed inside the caller's project lock/creation transaction, including proposal acceptance.
+export async function writeMilestone(
+  sql: postgres.TransactionSql,
+  projectId: string,
+  input: unknown,
+  actor: ProjectActor,
+): Promise<void> {
+  const fields = milestoneFields.parse(input);
+  const rows =
+    await sql`select id from milestones where project_id=${projectId}`;
+  if (rows.length >= 200)
+    throw new AppError(
+      409,
+      "MILESTONE_LIMIT",
+      "Use at most 200 milestones per project.",
+    );
+  await sql`insert into milestones(project_id,name,description,due_date,position) values (${projectId},${fields.name},${fields.description},${fields.dueDate},${rows.length})`;
+  await projectActivity(sql, projectId, actor, "milestone.created");
 }
 
 async function updateMilestone(

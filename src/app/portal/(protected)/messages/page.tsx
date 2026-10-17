@@ -6,6 +6,7 @@ import { messageSummary } from "../../../../lib/messages/queries";
 import { readConfiguration } from "../../../../lib/config";
 import { MessageThread } from "../../../../components/message-thread";
 import { ProjectLive } from "../../../../components/project-live";
+import { getBranding } from "../../../../lib/settings";
 
 export const metadata: Metadata = { title: "Messages" };
 export default async function MessagesPage(): Promise<ReactElement> {
@@ -27,6 +28,7 @@ export default async function MessagesPage(): Promise<ReactElement> {
         key={actor.id}
         conversation={{ kind: "client", id: actor.id }}
         actorId={actor.id}
+        defaultCurrency={(await getBranding())?.defaultCurrency ?? "GBP"}
         maxBytes={readConfiguration().storage.maxBytes}
       />
       <section className="card">

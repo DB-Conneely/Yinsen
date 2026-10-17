@@ -17,6 +17,7 @@ import type { Metadata } from "next";
 import { MessageThread } from "../../../../components/message-thread";
 import { ProjectLive } from "../../../../components/project-live";
 import { readConfiguration } from "../../../../lib/config";
+import { getBranding } from "../../../../lib/settings";
 
 export const metadata: Metadata = { title: "Client details" };
 
@@ -31,6 +32,10 @@ const activityLabels: Record<string, string> = {
   "client.email_requested": "Login email requested",
   "client.email_accepted": "Login email accepted by provider",
   "client.email_failed": "Login email failed — share a manual link",
+  "proposal.proposal": "Proposal sent",
+  "proposal.counter": "Counter-proposal sent",
+  "proposal.accept": "Proposal accepted",
+  "proposal.reject": "Proposal declined",
 };
 
 export default async function ClientDetail({
@@ -118,6 +123,8 @@ export default async function ClientDetail({
             key={id}
             conversation={{ kind: "client", id }}
             actorId={identity.id}
+            operator
+            defaultCurrency={(await getBranding())?.defaultCurrency ?? "GBP"}
             maxBytes={readConfiguration().storage.maxBytes}
           />
         </ProjectLive>

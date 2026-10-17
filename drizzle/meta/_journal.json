@@ -36,6 +36,13 @@
       "when": 1792242545329,
       "tag": "0004_premium_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792246803449,
+      "tag": "0005_nostalgic_spot",
+      "breakpoints": true
     }
   ]
 }

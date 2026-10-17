@@ -13,6 +13,10 @@ import {
 } from "./validation";
 
 type Fields = z.infer<typeof projectFields>;
+type Agreement = {
+  messageId: string;
+  snapshot: import("../messages/proposal-validators").ProposalTerms;
+};
 
 export async function projectMemberIds(
   sql: postgres.Sql | postgres.TransactionSql,
@@ -76,6 +80,35 @@ async function writeFields(
   return savedId;
 }
 
+// The caller owns authorization and the outer transaction (manual edit or mutual proposal acceptance).
+export async function writeProject(
+  sql: postgres.TransactionSql,
+  input: unknown,
+  actor: ProjectActor,
+  id?: string,
+  agreement?: Agreement,
+): Promise<string> {
+  const fields = projectFields.parse(input);
+  await validateMembers(sql, fields);
+  const savedId = await writeFields(sql, fields, id);
+  if (agreement) {
+    if (id)
+      throw new AppError(
+        409,
+        "INVALID_AGREEMENT",
+        "An agreement must create a new project.",
+      );
+    await sql`update projects set status='active',proposal_message_id=${agreement.messageId},proposal_snapshot=${JSON.stringify(agreement.snapshot)}::text::jsonb where id=${savedId}`;
+  }
+  await projectActivity(
+    sql,
+    savedId,
+    actor,
+    id ? "project.updated" : "project.created",
+  );
+  return savedId;
+}
+
 export async function saveProject(
   input: unknown,
   actor: ProjectActor,
@@ -105,14 +138,7 @@ export async function saveProject(
           }
         : patch,
     );
-    await validateMembers(sql, fields);
-    const savedId = await writeFields(sql, fields, id);
-    await projectActivity(
-      sql,
-      savedId,
-      actor,
-      id ? "project.updated" : "project.created",
-    );
+    const savedId = await writeProject(sql, fields, actor, id);
     return {
       project: await getProject(savedId, actor, sql),
       affected: [

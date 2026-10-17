@@ -18,6 +18,7 @@ import { messageRows, type MessagePage } from "./queries";
 import { resourceId } from "../projects/validation";
 import { logger } from "../logger";
 import type postgres from "postgres";
+import type { ProposalTerms } from "./proposal-validators";
 
 async function publish(conversation: Conversation): Promise<void> {
   if (conversation.kind === "project")
@@ -70,15 +71,42 @@ async function persistMessage(
   actor: ProjectActor,
   created: StoredFile[],
 ): Promise<void> {
-  const fingerprint = messageFingerprint(upload);
+  const inserted = await writeMessage(sql, conversation, actor, {
+    id: upload.requestId,
+    body: upload.body,
+    fingerprint: messageFingerprint(upload),
+    type: "message",
+    chainId: null,
+    replyTo: null,
+    proposalData: null,
+  });
+  if (inserted) await persistAttachments(sql, upload, created);
+}
+
+export type MessageRecord = {
+  id: string;
+  body: string;
+  fingerprint: string;
+  type: "message" | "proposal" | "counter" | "accept" | "reject";
+  chainId: string | null;
+  replyTo: string | null;
+  proposalData: ProposalTerms | null;
+};
+
+export async function writeMessage(
+  sql: postgres.TransactionSql,
+  conversation: Conversation,
+  actor: ProjectActor,
+  record: MessageRecord,
+): Promise<boolean> {
   const existing =
-    await sql`select id,sender_id,sender_type,fingerprint,client_id,project_id from messages where id=${resourceId.parse(upload.requestId)}`;
+    await sql`select id,sender_id,sender_type,fingerprint,client_id,project_id from messages where id=${resourceId.parse(record.id)}`;
   const row = existing[0];
   if (row) {
     if (
       row.sender_id !== actor.id ||
       row.sender_type !== actor.role ||
-      row.fingerprint !== fingerprint ||
+      row.fingerprint !== record.fingerprint ||
       (conversation.kind === "client" ? row.client_id : row.project_id) !==
         conversation.id
     )
@@ -87,14 +115,14 @@ async function persistMessage(
         "MESSAGE_CONFLICT",
         "This send has changed. Start a new message.",
       );
-    return;
+    return false;
   }
-  await sql`insert into messages(id,client_id,project_id,sender_type,sender_id,body,fingerprint,created_at) values (${upload.requestId},${conversation.kind === "client" ? conversation.id : null},${conversation.kind === "project" ? conversation.id : null},${actor.role},${actor.id},${upload.body},${fingerprint},clock_timestamp())`;
-  await persistAttachments(sql, upload, created);
+  await sql`insert into messages(id,client_id,project_id,sender_type,sender_id,body,fingerprint,type,chain_id,reply_to,proposal_data,created_at) values (${record.id},${conversation.kind === "client" ? conversation.id : null},${conversation.kind === "project" ? conversation.id : null},${actor.role},${actor.id},${record.body},${record.fingerprint},${record.type},${record.chainId},${record.replyTo},${record.proposalData ? JSON.stringify(record.proposalData) : null}::text::jsonb,clock_timestamp())`;
   if (conversation.kind === "project")
     await projectActivity(sql, conversation.id, actor, "message.sent");
   else
-    await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values (${conversation.id},${actor.role},${actor.id},'message.sent')`;
+    await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values (${conversation.id},${actor.role},${actor.id},${record.type === "message" ? "message.sent" : `proposal.${record.type}`})`;
+  return true;
 }
 
 export async function sendMessage(

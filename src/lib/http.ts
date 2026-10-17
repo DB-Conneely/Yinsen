@@ -22,7 +22,10 @@ export function assertWriteRequest(headers: Headers): void {
   }
 }
 
-export async function readJson(request: Request): Promise<unknown> {
+export async function readJson(
+  request: Request,
+  maxBytes = 8192,
+): Promise<unknown> {
   assertWriteRequest(request.headers);
   const reader = request.body?.getReader();
   if (!reader)
@@ -38,7 +41,7 @@ export async function readJson(request: Request): Promise<unknown> {
       const part = await reader.read();
       if (part.done) break;
       length += part.value.length;
-      if (length > 8192)
+      if (length > maxBytes)
         throw new AppError(
           413,
           "PAYLOAD_TOO_LARGE",

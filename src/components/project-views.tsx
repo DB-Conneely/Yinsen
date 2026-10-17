@@ -259,6 +259,8 @@ export async function ProjectWorkspace({
         key={id}
         conversation={{ kind: "project", id }}
         actorId={actor.id}
+        operator={actor.role === "operator"}
+        defaultCurrency={project.currency}
         maxBytes={readConfiguration().storage.maxBytes}
       />
       <section className="card">

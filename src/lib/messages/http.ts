@@ -1,10 +1,11 @@
-import { apiResponse } from "../http";
+import { apiResponse, readJson } from "../http";
 import { projectActor } from "../projects/access";
 import { requestToken } from "../auth/session";
 import { conversationAccess, type Conversation } from "./access";
 import { listMessages } from "./queries";
 import { readMessageUpload } from "../storage/upload";
 import { sendMessage } from "./service";
+import { actOnProposal } from "./proposal-actions";
 
 export async function getMessagesResponse(
   request: Request,
@@ -28,6 +29,17 @@ export async function sendMessageResponse(
       conversation,
       await projectActor(requestToken(request)),
     );
+    if (
+      request.headers.get("content-type")?.split(";")[0]?.trim() ===
+      "application/json"
+    ) {
+      const input = await readJson(request, 2 * 1024 * 1024);
+      return actOnProposal(
+        conversation,
+        input,
+        await projectActor(requestToken(request)),
+      );
+    }
     const upload = await readMessageUpload(request);
     try {
       // Upload time must not preserve an expired or revoked session.

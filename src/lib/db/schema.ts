@@ -14,7 +14,9 @@ import {
   uniqueIndex,
   bigserial,
   bigint,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import type { ProposalTerms } from "../messages/proposal-validators";
 
 export const installation = pgTable(
   "installation",
@@ -168,6 +170,10 @@ export const projects = pgTable(
     currency: text().notNull(),
     startDate: date("start_date"),
     dueDate: date("due_date"),
+    proposalMessageId: uuid("proposal_message_id")
+      .unique()
+      .references((): AnyPgColumn => messages.id),
+    proposalSnapshot: jsonb("proposal_snapshot").$type<ProposalTerms>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -186,6 +192,10 @@ export const projects = pgTable(
       sql`${table.budget} is null or ${table.budget} >= 0`,
     ),
     check("projects_currency", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "projects_proposal_snapshot",
+      sql`(${table.proposalMessageId} is null) = (${table.proposalSnapshot} is null)`,
+    ),
     check(
       "projects_dates",
       sql`${table.startDate} is null or ${table.dueDate} is null or ${table.dueDate} >= ${table.startDate}`,
@@ -275,6 +285,13 @@ export const messages = pgTable(
     senderId: uuid("sender_id").notNull(),
     body: text().notNull(),
     fingerprint: text().notNull(),
+    type: text()
+      .$type<"message" | "proposal" | "counter" | "accept" | "reject">()
+      .notNull()
+      .default("message"),
+    chainId: uuid("chain_id").references((): AnyPgColumn => messages.id),
+    replyTo: uuid("reply_to").references((): AnyPgColumn => messages.id),
+    proposalData: jsonb("proposal_data").$type<ProposalTerms>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -289,6 +306,17 @@ export const messages = pgTable(
       sql`${table.senderType} in ('operator','client')`,
     ),
     check("message_body_length", sql`length(${table.body}) <= 4000`),
+    check(
+      "message_proposal_shape",
+      sql`(${table.type} = 'message' and ${table.chainId} is null and ${table.replyTo} is null and ${table.proposalData} is null) or (${table.clientId} is not null and ${table.chainId} is not null and ((${table.type} = 'proposal' and ${table.chainId} = ${table.id} and ${table.replyTo} is null and ${table.proposalData} is not null) or (${table.type} = 'counter' and ${table.replyTo} is not null and ${table.proposalData} is not null) or (${table.type} in ('accept','reject') and ${table.replyTo} is not null and ${table.proposalData} is null)))`,
+    ),
+    uniqueIndex("proposal_one_successor")
+      .on(table.replyTo)
+      .where(sql`${table.replyTo} is not null`),
+    uniqueIndex("proposal_one_terminal")
+      .on(table.chainId)
+      .where(sql`${table.type} in ('accept','reject')`),
+    index("messages_proposal_chain").on(table.chainId, table.position),
     index("messages_client_position").on(table.clientId, table.position),
     index("messages_project_position").on(table.projectId, table.position),
   ],

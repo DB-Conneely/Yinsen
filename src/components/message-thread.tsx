@@ -11,6 +11,9 @@ import { z } from "zod";
 import { AppError } from "../lib/errors";
 import type { Conversation } from "../lib/messages/access";
 import type { Message, MessagePage } from "../lib/messages/queries";
+import { proposalView } from "../lib/messages/proposal-validators";
+import { ProposalCard } from "./proposal-card";
+import { ProposalEditor } from "./proposal-editor";
 
 const pageSchema = z.object({
   data: z
@@ -26,6 +29,8 @@ const pageSchema = z.object({
           senderName: z.string(),
           createdAt: z.string(),
           read: z.boolean(),
+          type: z.enum(["message", "proposal", "counter", "accept", "reject"]),
+          proposal: proposalView.nullable(),
           attachments: z.array(
             z.object({
               id: z.uuid(),
@@ -122,9 +127,13 @@ function useVisibleReads(
 function MessageBubble({
   message,
   actorId,
+  operator,
+  submitAction,
 }: {
   message: Message;
   actorId: string;
+  operator: boolean;
+  submitAction: (input: unknown) => Promise<MessagePage>;
 }): ReactElement {
   return (
     <article
@@ -140,6 +149,11 @@ function MessageBubble({
         </time>
       </header>
       {message.body && <p className="preserve-lines">{message.body}</p>}
+      <ProposalCard
+        message={message}
+        operator={operator}
+        submitAction={submitAction}
+      />
       {message.attachments.length > 0 && (
         <ul className="attachment-list">
           {message.attachments.map((file) => (
@@ -295,10 +309,14 @@ export function MessageThread({
   conversation,
   actorId,
   maxBytes,
+  operator = false,
+  defaultCurrency,
 }: {
   conversation: Conversation;
   actorId: string;
   maxBytes: number;
+  operator?: boolean;
+  defaultCurrency: string;
 }): ReactElement {
   const [page, setPage] = useState<MessagePage>({
     messages: [],
@@ -307,6 +325,9 @@ export function MessageThread({
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [proposing, setProposing] = useState(false);
+  const proposeTrigger = useRef<HTMLButtonElement>(null);
+  const loadedFrom = useRef<string | undefined>(undefined);
   const root = useRef<HTMLElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -327,14 +348,36 @@ export function MessageThread({
       });
       return fetch(`${endpoint}?${params}`, { cache: "no-store" })
         .then(responsePage)
-        .then((result) => {
+        .then(async (result) => {
+          // Refresh loaded history too: old proposal cards must never keep stale live actions.
+          if (!before && loadedFrom.current) {
+            let cursor = result.messages[0]?.position;
+            let earlier = result.hasEarlier;
+            while (
+              earlier &&
+              cursor &&
+              BigInt(cursor) > BigInt(loadedFrom.current)
+            ) {
+              const previous = await responsePage(
+                await fetch(
+                  `${endpoint}?${new URLSearchParams({ search, before: cursor })}`,
+                  { cache: "no-store" },
+                ),
+              );
+              result = {
+                messages: [...previous.messages, ...result.messages],
+                hasEarlier: previous.hasEarlier,
+              };
+              cursor = previous.messages[0]?.position;
+              earlier = previous.hasEarlier;
+            }
+          }
           if (current !== generation.current) return;
+          loadedFrom.current =
+            result.messages[0]?.position ?? loadedFrom.current;
           setPage((old) => ({
             messages: mergeMessages(old.messages, result.messages),
-            hasEarlier:
-              before || !old.messages.length
-                ? result.hasEarlier
-                : old.hasEarlier,
+            hasEarlier: result.hasEarlier,
           }));
           setError("");
         })
@@ -365,9 +408,26 @@ export function MessageThread({
   const sent = (result: MessagePage): void => {
     setSearch("");
     setPage(result);
+    loadedFrom.current = result.messages[0]?.position;
     requestAnimationFrame(() => {
       if (list.current) list.current.scrollTop = list.current.scrollHeight;
     });
+  };
+  const proposalAction = async (input: unknown): Promise<MessagePage> => {
+    const result = await responsePage(
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    );
+    await load();
+    window.dispatchEvent(new Event("yinsen:unread"));
+    return result;
+  };
+  const closeProposal = (): void => {
+    setProposing(false);
+    requestAnimationFrame(() => proposeTrigger.current?.focus());
   };
   return (
     <section
@@ -385,6 +445,15 @@ export function MessageThread({
               : "Project messages"}
           </h2>
         </div>
+        {conversation.kind === "client" && (
+          <button
+            className="secondary"
+            ref={proposeTrigger}
+            onClick={() => setProposing(true)}
+          >
+            Propose a project
+          </button>
+        )}
       </div>
       <form
         role="search"
@@ -395,6 +464,7 @@ export function MessageThread({
           const next = typeof value === "string" ? value : "";
           setLoading(true);
           setPage({ messages: [], hasEarlier: false });
+          loadedFrom.current = undefined;
           if (next === search) void load();
           else setSearch(next);
         }}
@@ -449,7 +519,13 @@ export function MessageThread({
         }}
       >
         {page.messages.map((message) => (
-          <MessageBubble key={message.id} message={message} actorId={actorId} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            actorId={actorId}
+            operator={operator}
+            submitAction={proposalAction}
+          />
         ))}
       </div>
       {reads.error && (
@@ -461,6 +537,23 @@ export function MessageThread({
         </div>
       )}
       <MessageComposer endpoint={endpoint} maxBytes={maxBytes} onSent={sent} />
+      {proposing && (
+        <ProposalEditor
+          initial={{
+            name: "",
+            description: "",
+            budget: 0,
+            currency: defaultCurrency,
+            milestones: [],
+          }}
+          submitAction={async (input) => {
+            const result = await proposalAction(input);
+            closeProposal();
+            return result;
+          }}
+          onCancel={closeProposal}
+        />
+      )}
     </section>
   );
 }
