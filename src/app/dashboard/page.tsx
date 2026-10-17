@@ -8,14 +8,26 @@ export default async function Dashboard(): Promise<ReactElement> {
     <>
       <p className="eyebrow">Overview</p>
       <h1>Welcome, {identity.name}</h1>
-      <p>Your portal is ready. You are signed in as its operator.</p>
-      <section className="card">
-        <h2>Operator account</h2>
-        <p>{identity.email}</p>
-        <p>
-          <Link href="/">View your public portal</Link>
-        </p>
-      </section>
+      <p>Your workspace for client relationships and secure portal access.</p>
+      <div className="overview-links">
+        <Link href="/dashboard/clients" className="card">
+          <p className="eyebrow">Client directory</p>
+          <h2>
+            Manage your clients <span aria-hidden="true">↗</span>
+          </h2>
+          <p>
+            Keep contact details in one place, share login links and manage
+            access.
+          </p>
+        </Link>
+        <Link href="/" className="card">
+          <p className="eyebrow">Your brand</p>
+          <h2>
+            Open your public portal <span aria-hidden="true">↗</span>
+          </h2>
+          <p>See the welcome your clients receive, with your own branding.</p>
+        </Link>
+      </div>
     </>
   );
 }

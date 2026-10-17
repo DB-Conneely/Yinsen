@@ -3,7 +3,7 @@ import { clientForPage } from "../../../lib/auth/client-page";
 export default async function PortalPage(): Promise<ReactElement> {
   const identity = await clientForPage();
   return (
-    <section className="card">
+    <section className="card portal-welcome">
       <p className="eyebrow">Client portal</p>
       <h1>Welcome, {identity.name}</h1>
       <p>You are signed in as {identity.email}.</p>

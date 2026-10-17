@@ -14,6 +14,19 @@ import {
 } from "../../../../components/client-forms";
 import { AppError } from "../../../../lib/errors";
 
+const activityLabels: Record<string, string> = {
+  "client.created": "Client created",
+  "client.updated": "Client details updated",
+  "client.archived": "Client archived and access revoked",
+  "client.restored": "Client restored",
+  "client.link_created": "Login link generated",
+  "client.logged_in": "Signed in to the portal",
+  "client.session_revoked": "Session revoked",
+  "client.email_requested": "Login email requested",
+  "client.email_accepted": "Login email accepted by provider",
+  "client.email_failed": "Login email failed — share a manual link",
+};
+
 export default async function ClientDetail({
   params,
 }: {
@@ -33,72 +46,84 @@ export default async function ClientDetail({
   return (
     <>
       <Link href="/dashboard/clients">All clients</Link>
-      <h1>{client.name}</h1>
+      <div className="page-heading">
+        <div>
+          <h1>{client.name}</h1>
+          <p>{client.company || client.email}</p>
+        </div>
+      </div>
       {client.deletedAt && <p role="status">Archived · access revoked</p>}
-      <section className="card">
-        <h2>Client information</h2>
-        <dl>
-          <dt>Email</dt>
-          <dd>{client.email}</dd>
-          <dt>Company</dt>
-          <dd>{client.company || "—"}</dd>
-          <dt>Phone</dt>
-          <dd>{client.phone || "—"}</dd>
-          <dt>Private notes</dt>
-          <dd className="preserve-lines">{client.notes || "—"}</dd>
-          {Object.entries(client.metadata).map(([key, value]) => (
-            <div key={key}>
-              <dt>{key}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
       <ClientActions id={id} archived={Boolean(client.deletedAt)} />
-      <section className="card">
-        <h2>Active client sessions</h2>
-        <p>
-          Sessions expire 90 days after login. Revocation takes effect
-          immediately.
-        </p>
-        {sessions.length ? (
-          <ul>
-            {sessions.map((session) => (
-              <li key={session.id}>
-                <p>
-                  Created{" "}
-                  {new Date(session.createdAt).toLocaleString("en-GB", {
-                    timeZone: "UTC",
-                  })}{" "}
-                  UTC
-                  <br />
-                  Expires{" "}
-                  {new Date(session.expiresAt).toLocaleString("en-GB", {
-                    timeZone: "UTC",
-                  })}{" "}
-                  UTC
-                </p>
-                <RevokeSession clientId={id} sessionId={session.id} />
-              </li>
+      <div className="detail-grid">
+        <section className="card">
+          <h2>Client information</h2>
+          <dl>
+            <dt>Email</dt>
+            <dd>{client.email}</dd>
+            <dt>Company</dt>
+            <dd>{client.company || "—"}</dd>
+            <dt>Phone</dt>
+            <dd>{client.phone || "—"}</dd>
+            <dt>Private notes</dt>
+            <dd className="preserve-lines">{client.notes || "—"}</dd>
+            {Object.entries(client.metadata).map(([key, value]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>{value}</dd>
+              </div>
             ))}
-          </ul>
-        ) : (
-          <p>No active sessions.</p>
-        )}
-      </section>
+          </dl>
+        </section>
+        <section className="card">
+          <h2>Active client sessions</h2>
+          <p>
+            Sessions expire 90 days after login. Revocation takes effect
+            immediately.
+          </p>
+          {sessions.length ? (
+            <ul className="session-list">
+              {sessions.map((session) => (
+                <li key={session.id}>
+                  <p>
+                    Created{" "}
+                    {new Date(session.createdAt).toLocaleString("en-GB", {
+                      timeZone: "UTC",
+                    })}{" "}
+                    UTC
+                    <br />
+                    Expires{" "}
+                    {new Date(session.expiresAt).toLocaleString("en-GB", {
+                      timeZone: "UTC",
+                    })}{" "}
+                    UTC
+                  </p>
+                  <RevokeSession clientId={id} sessionId={session.id} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No active sessions.</p>
+          )}
+        </section>
+      </div>
       <section className="card">
         <h2>Client activity</h2>
         {activity.length ? (
-          <ol>
+          <ol className="activity-list">
             {activity.map((event) => (
               <li key={event.id}>
-                <strong>{event.eventType}</strong> · {event.actorType} ·{" "}
-                <time dateTime={new Date(event.createdAt).toISOString()}>
-                  {new Date(event.createdAt).toLocaleString("en-GB", {
-                    timeZone: "UTC",
-                  })}{" "}
-                  UTC
-                </time>
+                <strong>
+                  {activityLabels[event.eventType] ?? "Client activity"}
+                </strong>
+                <small>
+                  {event.actorType === "operator" ? "Operator" : "Client"} ·{" "}
+                  <time dateTime={new Date(event.createdAt).toISOString()}>
+                    {new Date(event.createdAt).toLocaleString("en-GB", {
+                      timeZone: "UTC",
+                    })}{" "}
+                    UTC
+                  </time>
+                </small>
               </li>
             ))}
           </ol>

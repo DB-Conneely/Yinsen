@@ -25,25 +25,32 @@ export default async function ClientsPage({
   }
   return (
     <>
-      <div className="actions">
-        <h1>Clients</h1>
+      <div className="page-heading">
+        <div>
+          <h1>Clients</h1>
+          <p>Contact details, private notes and secure portal access.</p>
+        </div>
         <Link href="/dashboard/clients/new" className="button">
           New client
         </Link>
       </div>
-      <form method="get" className="card">
-        <label htmlFor="search">Search name, email or company</label>
-        <input
-          id="search"
-          name="search"
-          defaultValue={filters.search}
-          maxLength={255}
-        />
-        <label htmlFor="sort">Sort</label>
-        <select id="sort" name="sort" defaultValue={filters.sort}>
-          <option value="name">Name</option>
-          <option value="newest">Newest first</option>
-        </select>
+      <form method="get" className="card search-toolbar">
+        <div>
+          <label htmlFor="search">Search name, email or company</label>
+          <input
+            id="search"
+            name="search"
+            defaultValue={filters.search}
+            maxLength={255}
+          />
+        </div>
+        <div>
+          <label htmlFor="sort">Sort</label>
+          <select id="sort" name="sort" defaultValue={filters.sort}>
+            <option value="name">Name</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </div>
         <label className="checkbox">
           <input
             type="checkbox"
@@ -55,31 +62,51 @@ export default async function ClientsPage({
         </label>
         <button type="submit">Search</button>
       </form>
-      <p role="status">
+      <p role="status" className="list-meta">
         {result.total} clients · Page {result.page} of {result.pages}
       </p>
       {result.clients.length ? (
-        <ul className="client-list">
-          {result.clients.map((client) => (
-            <li className="card" key={client.id}>
-              <h2>
-                <Link href={`/dashboard/clients/${client.id}`}>
-                  {client.name}
-                </Link>
-              </h2>
-              <p>
-                {client.company || "No company"}
-                <br />
-                {client.email}
-              </p>
-              {client.deletedAt && <strong>Archived</strong>}
-            </li>
-          ))}
-        </ul>
+        <div className="table-wrap">
+          <table className="client-table">
+            <caption className="sr-only">Client directory</caption>
+            <thead>
+              <tr>
+                <th scope="col">Client</th>
+                <th scope="col">Company</th>
+                <th scope="col">Email</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.clients.map((client) => (
+                <tr key={client.id}>
+                  <td>
+                    <Link href={`/dashboard/clients/${client.id}`}>
+                      {client.name}
+                    </Link>
+                  </td>
+                  <td>{client.company || "—"}</td>
+                  <td>{client.email}</td>
+                  <td>
+                    <span className="status-badge">
+                      {client.deletedAt ? "Archived" : "Active"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <section className="card">
+        <section className="card empty-state">
+          <span className="empty-symbol" aria-hidden="true">
+            ◎
+          </span>
           <h2>No clients found</h2>
           <p>Add your first client or change your search.</p>
+          <Link href="/dashboard/clients/new" className="button">
+            Create a client
+          </Link>
         </section>
       )}
       <nav className="actions" aria-label="Client pages">

@@ -1,5 +1,11 @@
 "use client";
-import { useState, type ReactElement, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import type { Client } from "../lib/clients/service";
@@ -131,6 +137,7 @@ export function ClientForm({ client }: { client?: Client }): ReactElement {
   }
   return (
     <form
+      className="card client-form"
       aria-busy={pending}
       onSubmit={(event) => {
         void submit(event);
@@ -197,6 +204,10 @@ export function ClientActions({
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirm) cancel.current?.focus();
+  }, [confirm]);
   async function action(kind: "archive" | "restore" | "link"): Promise<void> {
     setPending(true);
     setError("");
@@ -255,7 +266,13 @@ export function ClientActions({
         )}
       </div>
       {confirm && (
-        <div role="alertdialog" aria-label="Archive client confirmation">
+        <div
+          role="alertdialog"
+          aria-label="Archive client confirmation"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setConfirm(false);
+          }}
+        >
           <p>
             Archive this client? All sessions and pending login links will be
             revoked immediately. Historical information is preserved.
@@ -268,7 +285,11 @@ export function ClientActions({
           >
             Confirm archive
           </button>{" "}
-          <button className="secondary" onClick={() => setConfirm(false)}>
+          <button
+            ref={cancel}
+            className="secondary"
+            onClick={() => setConfirm(false)}
+          >
             Cancel
           </button>
         </div>

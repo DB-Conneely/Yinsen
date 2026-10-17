@@ -1,8 +1,14 @@
 import type { ReactElement } from "react";
+import { ThemeToggle } from "../../components/theme-toggle";
+import Link from "next/link";
 
 export default function OperatorGuide(): ReactElement {
   return (
     <main className="card">
+      <div className="setup-toolbar">
+        <Link href="/">Your portal</Link>
+        <ThemeToggle />
+      </div>
       <h1>Installation configuration</h1>
       <p>
         Database credentials and the public origin come from your server

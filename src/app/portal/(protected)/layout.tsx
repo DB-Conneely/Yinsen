@@ -16,7 +16,7 @@ export default async function PortalLayout({
   return (
     <BrandFrame branding={branding}>
       <main>
-        <nav className="actions">
+        <nav className="actions portal-nav">
           <a href="/portal">Your account</a>
           <LogoutButton destination="/portal/login" />
         </nav>

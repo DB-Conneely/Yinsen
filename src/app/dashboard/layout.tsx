@@ -4,7 +4,7 @@ import { getBranding } from "../../lib/settings";
 import { operatorForPage } from "../../lib/auth/page";
 import { BrandFrame } from "../../components/brand";
 import { LogoutButton } from "../../components/auth-forms";
-import Link from "next/link";
+import { DashboardNavigation } from "../../components/dashboard-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +20,16 @@ export default async function DashboardLayout({
     <BrandFrame branding={branding}>
       <div className="dashboard">
         <aside aria-label="Operator navigation">
-          <nav>
-            <Link href="/dashboard">Overview</Link>
-            <Link href="/dashboard/clients">Clients</Link>
-            <Link href="/">Public portal</Link>
-          </nav>
-          <p>{identity.name}</p>
-          <LogoutButton />
+          <DashboardNavigation />
+          <div className="sidebar-account">
+            <div className="operator-profile">
+              <div>
+                <strong>{identity.name}</strong>
+                <span>Operator account</span>
+              </div>
+            </div>
+            <LogoutButton />
+          </div>
         </aside>
         <main>{children}</main>
       </div>

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { passwordStrength, setupSchema } from "../lib/auth/validation";
 import { submitJson } from "./auth-forms";
 import { AppError } from "../lib/errors";
+import { ThemeToggle } from "./theme-toggle";
 
 const defaults = {
   brandName: "Portal",
@@ -331,6 +332,10 @@ export function SetupWizard(): ReactElement {
   }, [wizard.step]);
   return (
     <main className="card setup">
+      <div className="setup-toolbar">
+        <a href="/operator-guide">Installation guide</a>
+        <ThemeToggle />
+      </div>
       <p className="eyebrow">First boot · Step {wizard.step} of 4</p>
       <h1 tabIndex={-1} ref={heading}>
         Set up your portal
