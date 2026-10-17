@@ -3,19 +3,20 @@ import { useState, useRef, useEffect, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { clientRequest } from "./client-forms";
-import type { Project } from "../lib/projects/queries";
+import type { ProjectDetail } from "../lib/projects/queries";
 
 export function ProjectActions({
   project,
   operator,
 }: {
-  project: Project;
+  project: ProjectDetail;
   operator: boolean;
 }): ReactElement {
   const router = useRouter();
   const [confirm, setConfirm] = useState<"lock" | "delete" | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [reviewedRevision, setReviewedRevision] = useState("");
   const cancel = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -34,7 +35,11 @@ export function ProjectActions({
       await clientRequest(
         `/api/projects/${project.id}${kind === "lock" ? "/lock-in" : ""}`,
         kind === "delete" ? "DELETE" : kind === "lock" ? "POST" : "PATCH",
-        kind === "lock" || kind === "delete" ? {} : { status: kind },
+        kind === "lock"
+          ? { expectedRevision: reviewedRevision }
+          : kind === "delete"
+            ? {}
+            : { status: kind },
         z.unknown(),
       );
       setConfirm(null);
@@ -42,6 +47,10 @@ export function ProjectActions({
       router.refresh();
     } catch (failure: unknown) {
       setError(failure instanceof Error ? failure.message : "Request failed.");
+      if (kind === "lock") {
+        setConfirm(null);
+        router.refresh();
+      }
     } finally {
       setPending(false);
     }
@@ -101,7 +110,10 @@ export function ProjectActions({
           <button
             ref={trigger}
             disabled={pending}
-            onClick={() => setConfirm("lock")}
+            onClick={() => {
+              setReviewedRevision(project.lockRevision);
+              setConfirm("lock");
+            }}
           >
             Review and lock in
           </button>
@@ -125,9 +137,19 @@ export function ProjectActions({
               ? "You are confirming the project scope, milestones and budget shown here. Ready to lock it in?"
               : "Delete this project? It disappears from both workspaces. Its history remains preserved."}
           </p>
+          {confirm === "lock" && reviewedRevision !== project.lockRevision && (
+            <p role="alert">
+              The terms changed while this confirmation was open. Cancel and
+              review the current project before confirming again.
+            </p>
+          )}
           <div className="actions">
             <button
-              disabled={pending}
+              disabled={
+                pending ||
+                (confirm === "lock" &&
+                  reviewedRevision !== project.lockRevision)
+              }
               onClick={() => {
                 void action(confirm);
               }}

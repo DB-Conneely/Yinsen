@@ -57,6 +57,7 @@ import {
 } from "../src/app/api/milestones/[id]/route";
 import { POST as approvePost } from "../src/app/api/milestones/[id]/approve/route";
 import { GET as eventGet } from "../src/app/api/events/route";
+import { sendMessage } from "../src/lib/messages/service";
 
 let operator: ProjectActor;
 let primary: ProjectActor;
@@ -88,6 +89,18 @@ function request(
     },
     body: JSON.stringify(body),
   });
+}
+
+async function editProject(
+  input: Record<string, unknown>,
+  id = project.id,
+): Promise<ProjectDetail> {
+  const current = await getProject(id, operator);
+  return saveProject(
+    { ...input, expectedRevision: current.editRevision },
+    operator,
+    id,
+  );
 }
 
 beforeAll(async () => {
@@ -187,23 +200,253 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
     await expect(getProject(randomUUID(), outsider)).rejects.toMatchObject({
       statusCode: 404,
     });
-    const updated = await saveProject(
-      { name: "Updated workspace" },
-      operator,
-      project.id,
-    );
+    const updated = await editProject({ name: "Updated workspace" });
     expect(updated.budget).toBe(12345);
     expect(updated.members).toHaveLength(2);
     expect(() => operatorOnly(member)).toThrow();
+  });
+  it("rejects stale full edits and preserves unrelated fields on deliberate partial retry", async () => {
+    const initial = await saveProject(
+      { ...fields, clientIds: [primary.id, member.id] },
+      operator,
+    );
+    const newer = await editProject(
+      { budget: 990000, clientIds: [primary.id] },
+      initial.id,
+    );
+    await expect(
+      saveProject(
+        {
+          ...fields,
+          description: "My retained draft",
+          clientIds: [primary.id, member.id],
+          expectedRevision: initial.editRevision,
+        },
+        operator,
+        initial.id,
+      ),
+    ).rejects.toMatchObject({ statusCode: 409, code: "PROJECT_CHANGED" });
+    expect(await getProject(initial.id, operator)).toEqual(newer);
+    await expect(
+      saveProject({ description: "Missing baseline" }, operator, initial.id),
+    ).rejects.toBeDefined();
+    const retried = await saveProject(
+      {
+        description: "My retained draft",
+        expectedRevision: newer.editRevision,
+      },
+      operator,
+      initial.id,
+    );
+    expect(retried).toMatchObject({
+      budget: 990000,
+      description: "My retained draft",
+    });
+    expect(retried.members.map((item) => item.id)).toEqual([primary.id]);
+    const cleared = await editProject(
+      { description: "", budget: null, startDate: null, dueDate: null },
+      initial.id,
+    );
+    expect(cleared).toMatchObject({
+      description: "",
+      budget: null,
+      startDate: null,
+      dueDate: null,
+    });
+  });
+  it("binds lock-in to reviewed terms and ordered milestones, ignoring messages", async () => {
+    const initial = await saveProject(
+      { ...fields, clientIds: [primary.id] },
+      operator,
+    );
+    await createMilestone(
+      initial.id,
+      { name: "Original", dueDate: "2026-11-01" },
+      operator,
+    );
+    await createMilestone(initial.id, { name: "Second" }, operator);
+    let reviewed = await transitionProject(
+      initial.id,
+      { status: "pending_lockin" },
+      operator,
+    );
+    await sendMessage(
+      { kind: "project", id: initial.id },
+      {
+        requestId: randomUUID(),
+        body: "A conversation does not change the terms",
+        files: [],
+        cleanup: () => Promise.resolve(),
+      },
+      operator,
+    );
+    const afterMessage = await getProject(initial.id, primary);
+    expect(afterMessage.lockRevision).toBe(reviewed.lockRevision);
+    expect(afterMessage.editRevision).toBe(reviewed.editRevision);
+    for (const change of [
+      { description: "Unseen scope" },
+      { budget: 990000 },
+      { startDate: "2026-10-01", dueDate: "2026-12-01" },
+    ]) {
+      const changed = await editProject(change, initial.id);
+      await expect(
+        transitionProject(
+          initial.id,
+          { status: "active", expectedRevision: reviewed.lockRevision },
+          primary,
+        ),
+      ).rejects.toMatchObject({ statusCode: 409, code: "PROJECT_CHANGED" });
+      expect(await getProject(initial.id, primary)).toEqual(changed);
+      reviewed = changed;
+    }
+    const first = reviewed.milestones[0];
+    if (!first) throw new TypeError("Missing reviewed milestone");
+    const changed = await mutateMilestone(
+      first.id,
+      {
+        position: 1,
+        name: "Unseen milestone",
+        description: "New work",
+        dueDate: "2026-12-02",
+      },
+      operator,
+      "update",
+    );
+    await expect(
+      transitionProject(
+        initial.id,
+        { status: "active", expectedRevision: reviewed.lockRevision },
+        primary,
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await getProject(initial.id, primary)).toEqual(changed);
+    expect(
+      (
+        await transitionProject(
+          initial.id,
+          { status: "active", expectedRevision: changed.lockRevision },
+          primary,
+        )
+      ).status,
+    ).toBe("active");
+  });
+  it("binds primary approval to milestone content while allowing ordinary approved edits", async () => {
+    const initial = await saveProject(
+      { ...fields, clientIds: [primary.id] },
+      operator,
+    );
+    const created = await createMilestone(
+      initial.id,
+      { name: "Reviewed work" },
+      operator,
+    );
+    const id = created.milestones[0]?.id;
+    if (!id) throw new TypeError("Missing review milestone");
+    await mutateMilestone(id, { status: "in_progress" }, operator, "update");
+    const review = await mutateMilestone(
+      id,
+      { status: "review" },
+      operator,
+      "update",
+    );
+    const expectedRevision = review.milestones[0]?.reviewRevision;
+    const changed = await mutateMilestone(
+      id,
+      {
+        name: "Unseen work",
+        description: "Changed after approval click",
+        dueDate: "2027-01-01",
+      },
+      operator,
+      "update",
+    );
+    await expect(
+      mutateMilestone(id, { expectedRevision }, primary, "approve"),
+    ).rejects.toMatchObject({ statusCode: 409, code: "MILESTONE_CHANGED" });
+    expect(await getProject(initial.id, primary)).toEqual(changed);
+    const currentRevision = changed.milestones[0]?.reviewRevision;
+    await sendMessage(
+      { kind: "project", id: initial.id },
+      {
+        requestId: randomUUID(),
+        body: "No false approval conflict",
+        files: [],
+        cleanup: () => Promise.resolve(),
+      },
+      operator,
+    );
+    expect(
+      (
+        await mutateMilestone(
+          id,
+          { expectedRevision: currentRevision },
+          primary,
+          "approve",
+        )
+      ).milestones[0]?.status,
+    ).toBe("approved");
+    expect(
+      (
+        await mutateMilestone(
+          id,
+          { name: "Ordinary approved edit" },
+          operator,
+          "update",
+        )
+      ).milestones[0]?.status,
+    ).toBe("approved");
+  });
+  it("stores valid AD date boundaries and rejects year zero before manual persistence", async () => {
+    const initial = await saveProject(
+      {
+        ...fields,
+        startDate: "0001-01-01",
+        dueDate: "9999-12-31",
+        clientIds: [primary.id],
+      },
+      operator,
+    );
+    expect(initial).toMatchObject({
+      startDate: "0001-01-01",
+      dueDate: "9999-12-31",
+    });
+    await expect(
+      editProject({ dueDate: "0000-01-01" }, initial.id),
+    ).rejects.toBeDefined();
+    await expect(
+      createMilestone(
+        initial.id,
+        { name: "Invalid date", dueDate: "0000-01-01" },
+        operator,
+      ),
+    ).rejects.toBeDefined();
+    const valid = await createMilestone(
+      initial.id,
+      { name: "AD boundary", dueDate: "0001-01-01" },
+      operator,
+    );
+    expect(valid.milestones[0]?.dueDate).toBe("0001-01-01");
   });
   it("enforces lock-in roles and linearizes competing client confirmation", async () => {
     await expect(
       transitionProject(project.id, { status: "active" }, operator),
     ).rejects.toMatchObject({ statusCode: 409 });
-    await transitionProject(project.id, { status: "pending_lockin" }, operator);
+    const pending = await transitionProject(
+      project.id,
+      { status: "pending_lockin" },
+      operator,
+    );
     const results = await Promise.allSettled([
-      transitionProject(project.id, { status: "active" }, member),
-      transitionProject(project.id, { status: "active" }, primary),
+      transitionProject(
+        project.id,
+        { status: "active", expectedRevision: pending.lockRevision },
+        member,
+      ),
+      transitionProject(
+        project.id,
+        { status: "active", expectedRevision: pending.lockRevision },
+        primary,
+      ),
     ]);
     expect(
       results.filter((result) => result.status === "fulfilled"),
@@ -278,9 +521,23 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
     await expect(
       mutateMilestone(milestone.id, {}, operator, "approve"),
     ).rejects.toMatchObject({ statusCode: 403 });
+    const reviewed = (await getProject(project.id, primary)).milestones.find(
+      (item) => item.id === milestone.id,
+    );
+    expect(reviewed).toBeDefined();
     const results = await Promise.allSettled([
-      mutateMilestone(milestone.id, {}, primary, "approve"),
-      mutateMilestone(milestone.id, {}, primary, "approve"),
+      mutateMilestone(
+        milestone.id,
+        { expectedRevision: reviewed?.reviewRevision },
+        primary,
+        "approve",
+      ),
+      mutateMilestone(
+        milestone.id,
+        { expectedRevision: reviewed?.reviewRevision },
+        primary,
+        "approve",
+      ),
     ]);
     expect(
       results.filter((result) => result.status === "fulfilled"),
@@ -315,11 +572,7 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
   it("rolls membership changes back on an archived/unknown client and keeps one primary", async () => {
     await archiveClient(outsider.id, { ...operator, role: "operator" }, false);
     await expect(
-      saveProject(
-        { clientIds: [primary.id, outsider.id] },
-        operator,
-        project.id,
-      ),
+      editProject({ clientIds: [primary.id, outsider.id] }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect((await getProject(project.id, operator)).members).toHaveLength(2);
     await expect(
@@ -332,10 +585,10 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
       if (change.projectId) changes.push(change.projectId);
     });
     await expect(
-      saveProject({ clientIds: [randomUUID()] }, operator, project.id),
+      editProject({ clientIds: [randomUUID()] }),
     ).rejects.toBeDefined();
     expect(changes).toEqual([]);
-    await saveProject({ description: "Current truth" }, operator, project.id);
+    await editProject({ description: "Current truth" });
     expect(changes).toEqual([project.id]);
     unsubscribe();
     publishProject(project.id, []);
@@ -366,7 +619,7 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(
       "event: refresh",
     );
-    await saveProject({ clientIds: [primary.id] }, operator, project.id);
+    await editProject({ clientIds: [primary.id] });
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(
       "event: revoked",
     );

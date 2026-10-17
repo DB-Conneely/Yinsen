@@ -10,6 +10,7 @@ import {
   projectPatch,
   projectStatus,
   resourceId,
+  reviewedVersion,
 } from "./validation";
 
 type Fields = z.infer<typeof projectFields>;
@@ -109,35 +110,46 @@ export async function writeProject(
   return savedId;
 }
 
+function mergedFields(
+  current: ProjectDetail | undefined,
+  patch: unknown,
+): Fields {
+  if (!current) return projectFields.parse(patch);
+  return projectFields.parse({
+    name: current.name,
+    description: current.description,
+    budget: current.budget,
+    currency: current.currency,
+    startDate: current.startDate,
+    dueDate: current.dueDate,
+    clientIds: [...current.members]
+      .sort(
+        (a, b) => Number(b.role === "primary") - Number(a.role === "primary"),
+      )
+      .map((member) => member.id),
+    ...projectPatch.omit({ expectedRevision: true }).parse(patch),
+  });
+}
+
 export async function saveProject(
   input: unknown,
   actor: ProjectActor,
   id?: string,
 ): Promise<ProjectDetail> {
   operatorOnly(actor);
-  const patch = (id ? projectPatch : projectFields).parse(input);
+  const { expectedRevision, ...patch } = id
+    ? projectPatch.parse(input)
+    : { ...projectFields.parse(input), expectedRevision: undefined };
   const result = await getSql().begin(async (sql) => {
     if (id) await lockProject(sql, resourceId.parse(id), actor);
     const current = id ? await getProject(id, actor, sql) : undefined;
-    const fields = projectFields.parse(
-      current
-        ? {
-            name: current.name,
-            description: current.description,
-            budget: current.budget,
-            currency: current.currency,
-            startDate: current.startDate,
-            dueDate: current.dueDate,
-            clientIds: current.members
-              .sort(
-                (a, b) =>
-                  Number(b.role === "primary") - Number(a.role === "primary"),
-              )
-              .map((m) => m.id),
-            ...patch,
-          }
-        : patch,
-    );
+    if (current && expectedRevision !== current.editRevision)
+      throw new AppError(
+        409,
+        "PROJECT_CHANGED",
+        "This project changed while you were editing. Your draft is kept. Review the current saved values before retrying.",
+      );
+    const fields = mergedFields(current, patch);
     const savedId = await writeProject(sql, fields, actor, id);
     return {
       project: await getProject(savedId, actor, sql),
@@ -151,27 +163,53 @@ export async function saveProject(
   return result.project;
 }
 
+function validateTransition(
+  current: ProjectDetail,
+  next: z.infer<typeof projectStatus>,
+  expectedRevision: string | undefined,
+  actor: ProjectActor,
+): void {
+  const allowed =
+    actor.role === "client"
+      ? current.status === "pending_lockin" && next === "active"
+      : (current.status === "draft" && next === "pending_lockin") ||
+        (current.status === "active" && next === "paused") ||
+        (current.status === "paused" && next === "active");
+  if (!allowed)
+    throw new AppError(
+      409,
+      "INVALID_TRANSITION",
+      "This project has changed or the requested transition is not allowed. Refresh and review its current state.",
+    );
+  if (
+    actor.role === "client" &&
+    reviewedVersion.shape.expectedRevision.parse(expectedRevision) !==
+      current.lockRevision
+  )
+    throw new AppError(
+      409,
+      "PROJECT_CHANGED",
+      "The project terms changed. Review the current scope, budget, dates and milestones before confirming again.",
+    );
+}
+
 export async function transitionProject(
   id: string,
   input: unknown,
   actor: ProjectActor,
 ): Promise<ProjectDetail> {
-  const next = z.object({ status: projectStatus }).strict().parse(input).status;
+  const data = z
+    .object({
+      status: projectStatus,
+      expectedRevision: reviewedVersion.shape.expectedRevision.optional(),
+    })
+    .strict()
+    .parse(input);
+  const next = data.status;
   const result = await getSql().begin(async (sql) => {
     await lockProject(sql, id, actor);
     const current = await getProject(id, actor, sql);
-    const allowed =
-      actor.role === "client"
-        ? current.status === "pending_lockin" && next === "active"
-        : (current.status === "draft" && next === "pending_lockin") ||
-          (current.status === "active" && next === "paused") ||
-          (current.status === "paused" && next === "active");
-    if (!allowed)
-      throw new AppError(
-        409,
-        "INVALID_TRANSITION",
-        "This project has changed or the requested transition is not allowed. Refresh and review its current state.",
-      );
+    validateTransition(current, next, data.expectedRevision, actor);
     await sql`update projects set status=${next} where id=${id}`;
     await projectActivity(
       sql,

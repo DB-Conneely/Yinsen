@@ -12,6 +12,7 @@ import {
   proposalAction,
   proposalTerms,
   proposalView,
+  storedProposalTerms,
   type ProposalTerms,
 } from "../src/lib/messages/proposal-validators";
 import { listMessages } from "../src/lib/messages/queries";
@@ -135,6 +136,90 @@ describe("proposal authority and shared transaction writers", () => {
         projectId: null,
         canRespond: true,
       }).success,
+    ).toBe(true);
+  });
+  it("rejects unsupported write dates while preserving narrowly validated historic terms", () => {
+    const historic = {
+      ...terms,
+      milestones: [{ ...terms.milestones[0], dueDate: "0000-01-01" }],
+    };
+    expect(proposalTerms.safeParse(historic).success).toBe(false);
+    expect(storedProposalTerms.parse(historic)).toEqual(historic);
+    for (const dueDate of ["0001-01-01", "9999-12-31", null])
+      expect(
+        proposalTerms.safeParse({
+          ...terms,
+          milestones: [{ name: "Boundary", dueDate }],
+        }).success,
+      ).toBe(true);
+    for (const dueDate of ["0000-01-01", "2027-02-30", "10000-01-01"])
+      expect(
+        proposalTerms.safeParse({
+          ...terms,
+          milestones: [{ name: "Invalid", dueDate }],
+        }).success,
+      ).toBe(false);
+    expect(
+      storedProposalTerms.safeParse({
+        ...historic,
+        milestones: [{ name: "Invalid", dueDate: "2027-02-30" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      storedProposalTerms.safeParse({ ...historic, actorId: randomUUID() })
+        .success,
+    ).toBe(false);
+  });
+  it("keeps old year-zero cards readable and recoverable without partially accepting them", async () => {
+    const historic = {
+      ...terms,
+      milestones: [
+        { name: "Historic date", description: "", dueDate: "0000-01-01" },
+      ],
+    };
+    const proposalId = randomUUID();
+    // Fixture represents a proposal genuinely accepted by the earlier write schema.
+    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${operator.id},'Historic date proposal',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::jsonb)`;
+    const cards = await listMessages(conversation, client);
+    expect(
+      cards.messages.find((row) => row.id === proposalId)?.proposal,
+    ).toMatchObject({
+      terms: historic,
+      canRespond: true,
+    });
+    const before =
+      await getSql()`select (select count(*) from projects)::int as projects,(select count(*) from project_clients)::int as members,(select count(*) from milestones)::int as milestones,(select count(*) from project_activity)::int as activity`;
+    const requestId = randomUUID();
+    for (let attempt = 0; attempt < 2; attempt++)
+      await expect(
+        respond("accept", proposalId, client, requestId),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        code: "PROPOSAL_TERMS_INVALID",
+        message:
+          "These stored terms cannot create a project. Counter with valid milestone dates (years 0001–9999), or reject this proposal.",
+      });
+    expect(
+      await getSql()`select (select count(*) from projects)::int as projects,(select count(*) from project_clients)::int as members,(select count(*) from milestones)::int as milestones,(select count(*) from project_activity)::int as activity`,
+    ).toEqual(before);
+    expect(
+      await getSql()`select id from messages where reply_to=${proposalId}`,
+    ).toHaveLength(0);
+    await respond("counter", proposalId, client, randomUUID(), {
+      ...terms,
+      milestones: [
+        { name: "Corrected date", description: "", dueDate: "0001-01-01" },
+      ],
+    });
+    await respond("accept", await latest(), operator);
+    const after = await listMessages(conversation, client);
+    expect(
+      after.messages.find((row) => row.id === proposalId)?.proposal?.terms,
+    ).toEqual(historic);
+    expect(
+      proposalView.safeParse(
+        after.messages.find((row) => row.id === proposalId)?.proposal,
+      ).success,
     ).toBe(true);
   });
   it("negotiates multiple rounds, creates exactly one active project and preserves the immutable agreement", async () => {

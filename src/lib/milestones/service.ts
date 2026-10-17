@@ -14,6 +14,7 @@ import {
   milestoneFields,
   milestonePatch,
   resourceId,
+  reviewedVersion,
 } from "../projects/validation";
 
 async function milestoneProject(id: string): Promise<string> {
@@ -129,7 +130,8 @@ export async function mutateMilestone(
     const current = await getProject(projectId, actor, sql);
     const milestone = current.milestones.find((item) => item.id === id);
     if (!milestone) throw new AppError(404, "NOT_FOUND", "Project not found.");
-    if (action === "approve") await approveMilestone(sql, current, id, actor);
+    if (action === "approve")
+      await approveMilestone(sql, current, id, actor, input);
     else if (action === "delete") {
       await sql`delete from milestones where id=${id}`;
       await renumber(
@@ -160,6 +162,7 @@ async function approveMilestone(
   project: ProjectDetail,
   id: string,
   actor: ProjectActor,
+  input: unknown,
 ): Promise<void> {
   if (
     actor.role !== "client" ||
@@ -177,6 +180,15 @@ async function approveMilestone(
       409,
       "INVALID_TRANSITION",
       "Only a milestone in review can be approved.",
+    );
+  if (
+    reviewedVersion.parse(input).expectedRevision !==
+    project.milestones.find((item) => item.id === id)?.reviewRevision
+  )
+    throw new AppError(
+      409,
+      "MILESTONE_CHANGED",
+      "The milestone changed. Review its current description and due date before approving again.",
     );
   await sql`update milestones set status='approved',updated_at=now() where id=${id}`;
 }

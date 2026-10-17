@@ -35,6 +35,11 @@ async function call(
 }
 const idFrom = (data: unknown): string =>
   z.object({ id: z.uuid() }).parse(data).id;
+const versions = z.object({
+  editRevision: z.string(),
+  lockRevision: z.string(),
+  milestones: z.array(z.object({ id: z.uuid(), reviewRevision: z.string() })),
+});
 async function client(
   name: string,
   operator: Credential,
@@ -158,9 +163,64 @@ try {
     (await call(path + "/lock-in", "POST", {}, operator)).response.status,
     403,
   );
+  const staleProject = versions.parse(
+    (await call(path, "GET", undefined, primary.credential)).data,
+  );
+  assert.equal(
+    (
+      await call(
+        path,
+        "PATCH",
+        {
+          description: "Changed after client review",
+          expectedRevision: staleProject.editRevision,
+        },
+        operator,
+      )
+    ).response.status,
+    200,
+  );
+  const beforeStaleLock = (
+    await call(path, "GET", undefined, primary.credential)
+  ).data;
+  assert.equal(
+    (
+      await call(
+        path + "/lock-in",
+        "POST",
+        { expectedRevision: staleProject.lockRevision },
+        primary.credential,
+      )
+    ).response.status,
+    409,
+  );
+  assert.deepEqual(
+    (await call(path, "GET", undefined, primary.credential)).data,
+    beforeStaleLock,
+  );
+  assert.equal(
+    (
+      await call(
+        path,
+        "PATCH",
+        {
+          budget: 900,
+          description: "Stale overwrite",
+          expectedRevision: staleProject.editRevision,
+        },
+        operator,
+      )
+    ).response.status,
+    409,
+  );
+  assert.deepEqual(
+    (await call(path, "GET", undefined, primary.credential)).data,
+    beforeStaleLock,
+  );
+  const expectedRevision = versions.parse(beforeStaleLock).lockRevision;
   const locks = await Promise.all([
-    call(path + "/lock-in", "POST", {}, member.credential),
-    call(path + "/lock-in", "POST", {}, primary.credential),
+    call(path + "/lock-in", "POST", { expectedRevision }, member.credential),
+    call(path + "/lock-in", "POST", { expectedRevision }, primary.credential),
   ]);
   assert.deepEqual(
     locks.map((entry) => entry.response.status).sort(),
@@ -217,9 +277,56 @@ try {
       .status,
     403,
   );
+  const staleMilestone = versions
+    .parse((await call(path, "GET", undefined, primary.credential)).data)
+    .milestones.find((item) => item.id === m.id);
+  assert.ok(staleMilestone);
+  assert.equal(
+    (
+      await call(
+        milestonePath,
+        "PATCH",
+        { name: "Changed after approval click" },
+        operator,
+      )
+    ).response.status,
+    200,
+  );
+  const beforeStaleApproval = (
+    await call(path, "GET", undefined, primary.credential)
+  ).data;
+  assert.equal(
+    (
+      await call(
+        milestonePath + "/approve",
+        "POST",
+        { expectedRevision: staleMilestone.reviewRevision },
+        primary.credential,
+      )
+    ).response.status,
+    409,
+  );
+  assert.deepEqual(
+    (await call(path, "GET", undefined, primary.credential)).data,
+    beforeStaleApproval,
+  );
+  const currentMilestone = versions
+    .parse(beforeStaleApproval)
+    .milestones.find((item) => item.id === m.id);
+  assert.ok(currentMilestone);
   const approvals = await Promise.all([
-    call(milestonePath + "/approve", "POST", {}, primary.credential),
-    call(milestonePath + "/approve", "POST", {}, primary.credential),
+    call(
+      milestonePath + "/approve",
+      "POST",
+      { expectedRevision: currentMilestone.reviewRevision },
+      primary.credential,
+    ),
+    call(
+      milestonePath + "/approve",
+      "POST",
+      { expectedRevision: currentMilestone.reviewRevision },
+      primary.credential,
+    ),
   ]);
   assert.deepEqual(
     approvals.map((entry) => entry.response.status).sort(),
@@ -246,8 +353,19 @@ try {
     },
   );
   assert.equal(
-    (await call(path, "PATCH", { clientIds: [primary.id] }, operator)).response
-      .status,
+    (
+      await call(
+        path,
+        "PATCH",
+        {
+          clientIds: [primary.id],
+          expectedRevision: versions.parse(
+            (await call(path, "GET", undefined, operator)).data,
+          ).editRevision,
+        },
+        operator,
+      )
+    ).response.status,
     200,
   );
   assert.equal(

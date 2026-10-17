@@ -7,7 +7,13 @@ export const projectStatus = z.enum([
   "active",
   "paused",
 ]);
-const date = z.iso.date().nullable();
+const date = z.iso
+  .date()
+  .refine((value) => value >= "0001-01-01", "Use a year from 0001 to 9999.")
+  .nullable();
+export const reviewedVersion = z
+  .object({ expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) })
+  .strict();
 export const projectFields = z
   .object({
     name: z.string().trim().min(1).max(255),
@@ -33,7 +39,8 @@ export const projectPatch = projectFields
     startDate: date,
     dueDate: date,
   })
-  .partial();
+  .partial()
+  .extend(reviewedVersion.shape);
 export const milestoneFields = z
   .object({
     name: z.string().trim().min(1).max(255),

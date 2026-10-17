@@ -8,10 +8,10 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   return apiResponse(async () => {
-    await readJson(request);
+    const data = await readJson(request);
     return mutateMilestone(
       (await context.params).id,
-      {},
+      data,
       await projectActor(requestToken(request)),
       "approve",
     );

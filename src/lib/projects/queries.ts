@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { createHash } from "node:crypto";
 import { getSql } from "../db/client";
 import { projectAccess, type ProjectActor } from "./access";
 import { projectStatus, milestoneStatus } from "./validation";
@@ -38,8 +39,11 @@ export type Milestone = {
   status: z.infer<typeof milestoneStatus>;
   position: number;
   dueDate: string | null;
+  reviewRevision: string;
 };
 export type ProjectDetail = Project & {
+  editRevision: string;
+  lockRevision: string;
   members: ProjectMember[];
   milestones: Milestone[];
   activity: {
@@ -49,6 +53,63 @@ export type ProjectDetail = Project & {
     createdAt: string;
   }[];
 };
+
+function revision(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function withMilestoneRevision(
+  milestone: Omit<Milestone, "reviewRevision">,
+): Milestone {
+  return {
+    ...milestone,
+    reviewRevision: revision([
+      milestone.id,
+      milestone.projectId,
+      milestone.name,
+      milestone.description,
+      milestone.dueDate,
+      milestone.status,
+    ]),
+  };
+}
+
+function withRevisions(
+  project: Project,
+  members: ProjectMember[],
+  milestones: Omit<Milestone, "reviewRevision">[],
+  activity: ProjectDetail["activity"],
+): ProjectDetail {
+  const fields = [
+    project.id,
+    project.name,
+    project.description,
+    project.budget,
+    project.currency,
+    project.startDate,
+    project.dueDate,
+    members
+      .map((member) => ({ id: member.id, role: member.role }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  ];
+  const reviewedMilestones = milestones.map(withMilestoneRevision);
+  return {
+    ...project,
+    members,
+    milestones: reviewedMilestones,
+    activity,
+    editRevision: revision(fields),
+    lockRevision: revision([
+      fields,
+      project.status,
+      reviewedMilestones.map((milestone) => [
+        milestone.id,
+        milestone.position,
+        milestone.reviewRevision,
+      ]),
+    ]),
+  };
+}
 
 export async function listProjects(
   actor: ProjectActor,
@@ -83,7 +144,7 @@ export async function getProject(
       ProjectMember[]
     >`select c.id,c.name,pc.role,(c.deleted_at is not null) as archived from project_clients pc join clients c on c.id=pc.client_id where pc.project_id=${id} order by pc.role desc,c.name,c.id`,
     sql<
-      Milestone[]
+      Omit<Milestone, "reviewRevision">[]
     >`select id,project_id as "projectId",name,description,status,position,due_date::text as "dueDate" from milestones where project_id=${id} order by position,id`,
     sql<
       ProjectDetail["activity"]
@@ -91,5 +152,5 @@ export async function getProject(
   ]);
   const project = rows[0];
   if (!project) throw new AppError(404, "NOT_FOUND", "Project not found.");
-  return { ...project, members, milestones, activity };
+  return withRevisions(project, members, milestones, activity);
 }

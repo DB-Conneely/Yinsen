@@ -9,6 +9,7 @@ import { loginOperator } from "../src/lib/auth/login";
 import { saveClient, archiveClient } from "../src/lib/clients/service";
 import { issueMagicLink, redeemMagicLink } from "../src/lib/auth/client";
 import { saveProject } from "../src/lib/projects/service";
+import { getProject } from "../src/lib/projects/queries";
 import type { ProjectActor } from "../src/lib/projects/access";
 import {
   conversationAccess,
@@ -470,7 +471,14 @@ describe("actual conversation writers, bounded files and current authorization",
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(
       "data: {}",
     );
-    await saveProject({ clientIds: [primary.id] }, operator, project.id);
+    await saveProject(
+      {
+        clientIds: [primary.id],
+        expectedRevision: (await getProject(project.id, operator)).editRevision,
+      },
+      operator,
+      project.id,
+    );
     await expect(listMessages(project, member)).rejects.toMatchObject({
       statusCode: 404,
     });

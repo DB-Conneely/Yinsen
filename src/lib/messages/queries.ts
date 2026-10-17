@@ -3,7 +3,7 @@ import type postgres from "postgres";
 import { getSql } from "../db/client";
 import type { ProjectActor } from "../projects/access";
 import { conversationAccess, type Conversation } from "./access";
-import { proposalTerms, type ProposalView } from "./proposal-validators";
+import { storedProposalTerms, type ProposalView } from "./proposal-validators";
 
 export type Attachment = {
   id: string;
@@ -80,7 +80,7 @@ export async function messageRows(
           terms:
             view.terms === null
               ? null
-              : proposalTerms.parse(JSON.parse(view.terms) as unknown),
+              : storedProposalTerms.parse(JSON.parse(view.terms) as unknown),
         };
       })(),
       attachments: attachments

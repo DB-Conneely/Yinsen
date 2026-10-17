@@ -3,13 +3,14 @@ import { requestToken } from "../../../../../lib/auth/session";
 import { projectActor } from "../../../../../lib/projects/access";
 import { transitionProject } from "../../../../../lib/projects/service";
 import { AppError } from "../../../../../lib/errors";
+import { reviewedVersion } from "../../../../../lib/projects/validation";
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   return apiResponse(async () => {
-    await readJson(request);
+    const data = await readJson(request);
     const actor = await projectActor(requestToken(request));
     if (actor.role !== "client")
       throw new AppError(
@@ -19,7 +20,7 @@ export async function POST(
       );
     return transitionProject(
       (await context.params).id,
-      { status: "active" },
+      { status: "active", ...reviewedVersion.parse(data) },
       actor,
     );
   });

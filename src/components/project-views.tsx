@@ -298,6 +298,7 @@ export async function ProjectEditor({
       <h1>{id ? "Edit project" : "New project"}</h1>
       {clients.length ? (
         <ProjectForm
+          key={id ?? "new"}
           project={project}
           clients={clients}
           currency={branding?.defaultCurrency ?? "GBP"}

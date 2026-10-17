@@ -87,6 +87,33 @@ async function acceptedProject(
   return rows[0]?.id ?? null;
 }
 
+async function createAgreedProject(
+  sql: postgres.TransactionSql,
+  target: Target,
+  conversation: Conversation,
+  actor: ProjectActor,
+): Promise<string> {
+  const parsed = proposalTerms.safeParse(JSON.parse(target.terms) as unknown);
+  if (!parsed.success)
+    throw new AppError(
+      400,
+      "PROPOSAL_TERMS_INVALID",
+      "These stored terms cannot create a project. Counter with valid milestone dates (years 0001–9999), or reject this proposal.",
+    );
+  const terms = parsed.data;
+  const { milestones, ...fields } = terms;
+  const projectId = await writeProject(
+    sql,
+    { ...fields, clientIds: [conversation.id] },
+    actor,
+    undefined,
+    { messageId: target.id, snapshot: terms },
+  );
+  for (const milestone of milestones)
+    await writeMilestone(sql, projectId, milestone, actor);
+  return projectId;
+}
+
 async function persistAction(
   sql: postgres.TransactionSql,
   conversation: Conversation,
@@ -105,19 +132,8 @@ async function persistAction(
   }
   if (target) await assertLatest(sql, target, actor);
   let projectId: string | null = null;
-  if (action.type === "accept" && target) {
-    const terms = proposalTerms.parse(JSON.parse(target.terms) as unknown);
-    const { milestones, ...fields } = terms;
-    projectId = await writeProject(
-      sql,
-      { ...fields, clientIds: [conversation.id] },
-      actor,
-      undefined,
-      { messageId: target.id, snapshot: terms },
-    );
-    for (const milestone of milestones)
-      await writeMilestone(sql, projectId, milestone, actor);
-  }
+  if (action.type === "accept" && target)
+    projectId = await createAgreedProject(sql, target, conversation, actor);
   await writeMessage(sql, conversation, actor, record);
   return projectId;
 }

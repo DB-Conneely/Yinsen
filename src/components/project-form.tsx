@@ -4,10 +4,82 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { clientRequest } from "./client-forms";
 import type { ProjectDetail } from "../lib/projects/queries";
-import { minorAmount, budgetInput } from "../lib/money";
+import { minorAmount, budgetInput, formatBudget } from "../lib/money";
+
+const currentProject = z.object({
+  editRevision: z.string(),
+  name: z.string(),
+  description: z.string(),
+  budget: z.number().nullable(),
+  currency: z.string(),
+  startDate: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  members: z.array(
+    z.object({ id: z.string(), name: z.string(), role: z.string() }),
+  ),
+});
+
+function projectDraft(
+  data: FormData,
+  primary: string,
+  currency: string,
+): Record<string, unknown> {
+  const budget = data.get("budget"),
+    selectedCurrency = data.get("currency");
+  return {
+    name: data.get("name"),
+    description: data.get("description"),
+    budget: minorAmount(
+      typeof budget === "string" ? budget : "",
+      typeof selectedCurrency === "string" ? selectedCurrency : currency,
+    ),
+    currency: selectedCurrency,
+    startDate: data.get("startDate") || null,
+    dueDate: data.get("dueDate") || null,
+    clientIds: [
+      primary,
+      ...data
+        .getAll("members")
+        .map(String)
+        .filter((id) => id !== primary)
+        .sort(),
+    ],
+  };
+}
+
+function projectChanges(
+  project: ProjectDetail,
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  const original: Record<string, unknown> = {
+    name: project.name,
+    description: project.description,
+    budget: project.budget,
+    currency: project.currency,
+    startDate: project.startDate,
+    dueDate: project.dueDate,
+    clientIds: [
+      project.members.find((member) => member.role === "primary")?.id,
+      ...project.members
+        .filter((member) => member.role !== "primary")
+        .map((member) => member.id)
+        .sort(),
+    ],
+  };
+  const changes = Object.fromEntries(
+    Object.entries(fields).filter(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(original[key]),
+    ),
+  );
+  if (changes.budget !== undefined || changes.currency !== undefined) {
+    changes.budget = fields.budget;
+    changes.currency = fields.currency;
+  }
+  return changes;
+}
 
 export function ProjectForm({
-  project,
+  project: suppliedProject,
   clients,
   currency,
 }: {
@@ -16,6 +88,14 @@ export function ProjectForm({
   currency: string;
 }): ReactElement {
   const router = useRouter();
+  // A server refresh must not silently replace the draft's original baseline.
+  const [project] = useState(suppliedProject);
+  const [expectedRevision, setExpectedRevision] = useState(
+    project?.editRevision,
+  );
+  const [review, setReview] = useState<z.infer<typeof currentProject> | null>(
+    null,
+  );
   const primaryId = project?.members.find(
     (member) => member.role === "primary",
   )?.id;
@@ -28,36 +108,41 @@ export function ProjectForm({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  async function reviewCurrent(): Promise<void> {
+    if (!project) return;
+    setPending(true);
+    try {
+      setReview(
+        await clientRequest(
+          `/api/projects/${project.id}`,
+          "GET",
+          undefined,
+          currentProject,
+        ),
+      );
+    } catch (failure: unknown) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Unable to load current project.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setPending(true);
     setError("");
     const data = new FormData(event.currentTarget);
-    const rawBudget = data.get("budget");
-    const budget = typeof rawBudget === "string" ? rawBudget : "";
-    const rawCurrency = data.get("currency");
-    const selectedCurrency =
-      typeof rawCurrency === "string" ? rawCurrency : currency;
-    const clientIds = [
-      primary,
-      ...data
-        .getAll("members")
-        .map(String)
-        .filter((id) => id !== primary),
-    ];
     try {
+      const fields = projectDraft(data, primary, currency);
       const saved = await clientRequest(
         `/api/projects${project ? `/${project.id}` : ""}`,
         project ? "PATCH" : "POST",
-        {
-          name: data.get("name"),
-          description: data.get("description"),
-          budget: minorAmount(budget, selectedCurrency),
-          currency: data.get("currency"),
-          startDate: data.get("startDate") || null,
-          dueDate: data.get("dueDate") || null,
-          clientIds,
-        },
+        project
+          ? { ...projectChanges(project, fields), expectedRevision }
+          : fields,
         z.object({ id: z.uuid() }),
       );
       router.push(`/dashboard/projects/${saved.id}`);
@@ -168,6 +253,56 @@ export function ProjectForm({
         defaultValue={project?.dueDate ?? ""}
       />
       <p role="alert">{error}</p>
+      {project && error && (
+        <button
+          type="button"
+          className="secondary"
+          disabled={pending}
+          onClick={() => {
+            void reviewCurrent();
+          }}
+        >
+          Review current saved values
+        </button>
+      )}
+      {review && (
+        <section className="card" aria-label="Current saved project">
+          <h2>Current saved project</h2>
+          <p>
+            Your draft is kept above. Compare it with these saved values.
+            Retrying applies only the fields you changed in your draft.
+          </p>
+          <h3>{review.name}</h3>
+          <p className="preserve-lines">
+            {review.description || "No description added."}
+          </p>
+          <p>{formatBudget(review.budget, review.currency)}</p>
+          <p>
+            Start: {review.startDate ?? "Not set"} · Due:{" "}
+            {review.dueDate ?? "Not set"}
+          </p>
+          <ul>
+            {review.members.map((member) => (
+              <li key={member.id}>
+                {member.name} · {member.role}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setExpectedRevision(review.editRevision);
+              setReview(null);
+              setError(
+                "Current values reviewed. Save project to retry your changed fields.",
+              );
+            }}
+          >
+            Use reviewed values for retry
+          </button>
+        </section>
+      )}
       <button disabled={pending || !primary} type="submit">
         {pending ? "Saving…" : "Save project"}
       </button>

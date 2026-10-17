@@ -323,6 +323,7 @@ export function MessageThread({
     hasEarlier: false,
   });
   const [search, setSearch] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [proposing, setProposing] = useState(false);
@@ -406,8 +407,12 @@ export function MessageThread({
     };
   }, [load]);
   const sent = (result: MessagePage): void => {
+    generation.current++;
     setSearch("");
+    if (searchInput.current) searchInput.current.value = "";
     setPage(result);
+    setLoading(false);
+    setError("");
     loadedFrom.current = result.messages[0]?.position;
     requestAnimationFrame(() => {
       if (list.current) list.current.scrollTop = list.current.scrollHeight;
@@ -421,7 +426,7 @@ export function MessageThread({
         body: JSON.stringify(input),
       }),
     );
-    await load();
+    sent(result);
     window.dispatchEvent(new Event("yinsen:unread"));
     return result;
   };
@@ -471,7 +476,12 @@ export function MessageThread({
       >
         <label>
           Search messages
-          <input name="search" maxLength={100} defaultValue={search} />
+          <input
+            ref={searchInput}
+            name="search"
+            maxLength={100}
+            defaultValue={search}
+          />
         </label>
         <button className="secondary">Search</button>
       </form>

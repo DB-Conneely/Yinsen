@@ -344,7 +344,21 @@ await data(
   await call(
     `/api/projects/${project.id}`,
     "PATCH",
-    { clientIds: [outside.id] },
+    {
+      clientIds: [outside.id],
+      expectedRevision: z
+        .object({ editRevision: z.string() })
+        .parse(
+          await data(
+            await call(
+              `/api/projects/${project.id}`,
+              "GET",
+              undefined,
+              operator,
+            ),
+          ),
+        ).editRevision,
+    },
     operator,
   ),
 );

@@ -95,6 +95,119 @@ const idFrom = (result: z.infer<typeof envelope>): string => {
   return id;
 };
 
+async function dateBoundaries(
+  path: string,
+  operator: string,
+  client: string,
+): Promise<void> {
+  for (const dueDate of ["0000-01-01", "2027-02-30", "10000-01-01"]) {
+    const invalid = action("proposal", undefined, {
+      ...terms,
+      milestones: [{ name: "Invalid date", description: "", dueDate }],
+    });
+    await call(path, "POST", invalid, operator, 400);
+    assert.equal(
+      (
+        await getSql()`select id from messages where id=${String(invalid.requestId)}`
+      ).length,
+      0,
+    );
+  }
+  const target = idFrom(await call(path, "POST", action("proposal"), operator));
+  const invalidCounter = action("counter", target, {
+    ...terms,
+    milestones: [
+      { name: "Invalid counter", description: "", dueDate: "0000-01-01" },
+    ],
+  });
+  await call(path, "POST", invalidCounter, client, 400);
+  assert.equal(
+    (await getSql()`select id from messages where reply_to=${target}`).length,
+    0,
+  );
+  await call(path, "POST", action("reject", target), client);
+  for (const dueDate of ["0001-01-01", "9999-12-31", null]) {
+    const proposalId = idFrom(
+      await call(
+        path,
+        "POST",
+        action("proposal", undefined, {
+          ...terms,
+          milestones: [{ name: "Supported date", description: "", dueDate }],
+        }),
+        operator,
+      ),
+    );
+    await call(path, "POST", action("accept", proposalId), client);
+    const rows =
+      await getSql()`select m.due_date::text as "dueDate" from milestones m join projects p on m.project_id=p.id where p.proposal_message_id=${proposalId}`;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.dueDate, dueDate);
+  }
+}
+
+async function historicalDates(
+  path: string,
+  operator: string,
+  client: { id: string; cookie: string },
+): Promise<void> {
+  const actor = await getSql()`select id from operator`;
+  assert.ok(actor[0]);
+  const historic = {
+    ...terms,
+    milestones: [
+      {
+        name: "Historical unsupported date",
+        description: "",
+        dueDate: "0000-01-01",
+      },
+    ],
+  };
+  for (const recovery of ["reject", "counter"] as const) {
+    const proposalId = randomUUID();
+    // Preserve the format accepted before the date boundary was repaired.
+    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${String(actor[0].id)},'Historical unsupported date',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::jsonb)`;
+    const cards = page.parse(
+      (await call(path, "GET", undefined, client.cookie)).data,
+    );
+    assert.deepEqual(
+      cards.messages.find((row) => row.id === proposalId)?.proposal?.terms,
+      historic,
+    );
+    const before = Array.from(
+      await getSql()`select (select count(*) from projects)::int as projects,(select count(*) from project_clients)::int as members,(select count(*) from milestones)::int as milestones,(select count(*) from project_activity)::int as activity`,
+    );
+    const accept = action("accept", proposalId);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const denied = await call(path, "POST", accept, client.cookie, 400);
+      assert.equal(denied.error?.code, "PROPOSAL_TERMS_INVALID");
+      assert.match(denied.error.message, /Counter.*dates.*reject/);
+    }
+    assert.deepEqual(
+      Array.from(
+        await getSql()`select (select count(*) from projects)::int as projects,(select count(*) from project_clients)::int as members,(select count(*) from milestones)::int as milestones,(select count(*) from project_activity)::int as activity`,
+      ),
+      before,
+    );
+    assert.equal(
+      (await getSql()`select id from messages where reply_to=${proposalId}`)
+        .length,
+      0,
+    );
+    const result = await call(
+      path,
+      "POST",
+      action(recovery, proposalId),
+      client.cookie,
+    );
+    if (recovery === "counter")
+      await call(path, "POST", action("accept", idFrom(result)), operator);
+    const persisted =
+      await getSql()`select proposal_data::text as terms from messages where id=${proposalId}`;
+    assert.deepEqual(JSON.parse(String(persisted[0]?.terms)), historic);
+  }
+}
+
 try {
   const login = await fetch(origin + "/api/auth/login", {
     method: "POST",
@@ -150,6 +263,7 @@ try {
       status: z.string(),
       budget: z.number(),
       currency: z.string(),
+      lockRevision: z.string(),
       members: z.array(z.object({ id: z.uuid(), role: z.string() })),
       milestones: z.array(
         z.object({
@@ -195,7 +309,7 @@ try {
   await call(
     `/api/projects/${projectId}/lock-in`,
     "POST",
-    {},
+    { expectedRevision: project.lockRevision },
     client.cookie,
     409,
   );
@@ -218,6 +332,8 @@ try {
       ),
     true,
   );
+  await dateBoundaries(path, operator, client.cookie);
+  await historicalDates(path, operator, client);
 
   const reverse = idFrom(
     await call(path, "POST", action("proposal"), client.cookie),
@@ -335,7 +451,7 @@ try {
     400,
   );
   process.stdout.write(
-    "Installed proposals HTTP: both directions, multiple counters, active project/ordered terms, replay/races, real rollback/retry and current auth/CSRF passed.\n",
+    "Installed proposals HTTP: both directions, multiple counters, date boundaries/historic recovery, active project/ordered terms, replay/races, real rollback/retry and current auth/CSRF passed.\n",
   );
 } finally {
   await getSql().end({ timeout: 5 });

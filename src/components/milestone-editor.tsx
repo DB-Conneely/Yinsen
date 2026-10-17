@@ -128,7 +128,9 @@ export function MilestoneActions({
       await clientRequest(
         `/api/milestones/${milestone.id}${kind === "approve" ? "/approve" : ""}`,
         kind === "approve" ? "POST" : kind === "delete" ? "DELETE" : "PATCH",
-        data,
+        kind === "approve"
+          ? { expectedRevision: milestone.reviewRevision }
+          : data,
         z.unknown(),
       );
       setDeleting(false);
@@ -139,6 +141,7 @@ export function MilestoneActions({
           ? failure.message
           : "Unable to update milestone.",
       );
+      if (kind === "approve") router.refresh();
     } finally {
       setPending(false);
     }
