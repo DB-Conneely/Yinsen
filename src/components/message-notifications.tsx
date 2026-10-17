@@ -36,8 +36,10 @@ export function MessageNotifications({
   const [notice, setNotice] = useState("");
   useEffect(() => {
     let active = true;
+    let generation = 0;
     let previous: number | undefined;
     const refresh = async (): Promise<void> => {
+      const request = ++generation;
       try {
         const response = await fetch("/api/messages", { cache: "no-store" });
         if (!response.ok)
@@ -47,7 +49,7 @@ export function MessageNotifications({
             "Message notifications unavailable",
           );
         const data = summarySchema.parse(await response.json()).data;
-        if (active) {
+        if (active && request === generation) {
           if (previous !== undefined && data.total > previous)
             setNotice("New message received.");
           previous = data.total;
@@ -55,7 +57,7 @@ export function MessageNotifications({
           setError("");
         }
       } catch {
-        if (active)
+        if (active && request === generation)
           setError("Message notifications unavailable. Refresh to retry.");
       }
     };
@@ -67,11 +69,13 @@ export function MessageNotifications({
     source.addEventListener("refresh", changed);
     source.onopen = changed;
     source.addEventListener("revoked", () => {
+      generation++;
       setSummary({ total: 0, conversations: [] });
       source.close();
       window.location.assign(role === "operator" ? "/login" : "/portal/login");
     });
     source.addEventListener("unavailable", () => {
+      generation++;
       setError("Message notifications unavailable. Refresh to retry.");
       source.close();
     });
@@ -82,6 +86,7 @@ export function MessageNotifications({
     void refresh();
     return () => {
       active = false;
+      generation++;
       source.close();
       window.removeEventListener("yinsen:unread", read);
     };
