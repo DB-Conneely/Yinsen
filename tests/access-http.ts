@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./fixture";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 

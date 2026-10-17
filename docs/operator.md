@@ -76,15 +76,18 @@ The runtime pool is limited to five connections, with a five-second connect/stat
 
 ## Engineering checks
 
-The test suite requires a deliberate isolated synthetic PostgreSQL fixture, fully migrated. Never point it at customer data or assume the preserved root `.env` is the test fixture. Access tests refuse to run without `TEST_ISOLATED_DATABASE=1`; they establish a synthetic operator if absent and preserve it for repeatable runs. `npm test` checks actual schema, privilege denials, setup conflicts, password/session behavior and rollback as well as configuration, logs and rendering. Load the fixture environment before running checks, for example:
+The test suite requires a deliberate isolated synthetic PostgreSQL fixture, fully migrated. Never point it at customer data or assume the preserved root `.env` is the test fixture. Before importing any tests or querying data, the shared test guard requires `TEST_ISOLATED_DATABASE=1` and explicit runtime/migrator URLs for the same uniquely named `yinsen_test_*` database at the same server/port. It refuses the preserved `yinsen` database even with the flag set. Access tests establish a synthetic operator if absent and preserve it for repeatable runs. `npm test` checks actual schema, privilege denials, setup conflicts, password/session behavior and rollback as well as configuration, logs and rendering. Load the fixture environment before running checks, for example:
 
 ```sh
-TEST_ISOLATED_DATABASE=1 node --env-file=/absolute/private/fixture.env --run check
+set -a
+. /absolute/private/fixture.env
+set +a
+TEST_ISOLATED_DATABASE=1 npm run check
 TEST_ORIGIN=http://localhost:3007 npm run test:http
-TEST_ISOLATED_DATABASE=1 node --env-file=/absolute/private/fixture.env --run test:access
+TEST_ISOLATED_DATABASE=1 npm run test:access
 ```
 
-The HTTP checks exercise an ordinary already-running installation. `test:access` expects a synthetic setup with the test account defined in `tests/access.test.ts` and a newly started application process so its in-memory attempt window is clear; it deliberately exhausts login throttling. It checks the real protected pages, CSRF, session expiry/revocation, cookie renewal and rotated forwarding headers. Await startup readiness before running it. `test:http` supports either first boot or an installed branded landing page.
+The HTTP checks exercise an ordinary already-running installation. `test:access` expects a synthetic setup with the test account defined in `tests/access.test.ts` and a newly started application process so its in-memory attempt window is clear; it deliberately exhausts login throttling. It checks the real protected pages, CSRF, session expiry/revocation, cookie renewal and rotated forwarding headers. Await startup readiness before running it. `test:http` supports either first boot or an installed branded landing page. To prove first-boot concurrency, run `TEST_ISOLATED_DATABASE=1 npm run test:setup-race` against a separately configured, migrated installation with zero operators/settings. It refuses an already completed setup and never resets data; its successful run intentionally retains one synthetic operator/settings/session.
 
 See [engineering gates](as-built/engineering-gates.md) for the mapping and exercised failures. These checks support installed functional proof; they do not establish future project, invoice or provider behavior.
 
