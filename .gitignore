@@ -38,6 +38,7 @@ secrets*.json
 .npmrc.local
 
 # Private local operations, proof, sessions and generated context
+/docs/
 .local/
 .private/
 private/
@@ -118,5 +119,5 @@ compose.override.yml
 .codex/memories/
 
 # Intentionally tracked: source migrations/Drizzle journals, lockfiles, tests,
-# reviewed screenshots, docs, rules, roles and repo-local skills.
+# reviewed screenshots, rules, roles and repo-local skills.
 # This file is not a secret scanner; inspect every staged diff before committing.

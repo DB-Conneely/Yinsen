@@ -5,7 +5,7 @@ node_modules
 .local
 .private
 coverage
-docs/legacy
+docs
 cortex-context
 graphify-out
 .cortex
