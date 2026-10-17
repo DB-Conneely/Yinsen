@@ -1,5 +1,9 @@
 # Current as-built system
 
+17 October 2026 policy update: Neels explicitly approved A13-04's generic conditional acknowledgment with failed-token invalidation, operator-visible failure and manual-link recovery. QA closed that policy finding against the unchanged installed evidence; all twelve task findings now have final dispositions. **Phase 1 remains UNVERIFIED only for real Resend inbox delivery, received-email rendering and login from the received link.** No product/runtime/configuration change or live send accompanied this approval. Current source remains `e61f0512fa7fd11363ee4b92a90e4bd6296cf78490b1369728b953cecdf8e5e9`; see the [QA policy assessment](../qa/phase-01.md#a13-04-approval-and-independent-policy-assessment--17-october-2026).
+
+## Previous QA checkpoint — before A13-04 approval
+
 17 October 2026: Tasks 1.1–1.3 are implemented on `abyssbox`, `/home/neels/development/yinsen`, under Neels's explicit Phase 1 resume and visual/theme amendment. Three independent audits, three coordinated patch handovers and fresh write-capable [QA](../qa/phase-01.md) have completed all available installed proof and gates, including the natural hourly cleanup. Eleven findings have reproduced repair outcomes; A13-04 is explicitly open. **Phase 1 remains UNVERIFIED:** the explicit public-email failure/privacy decision and real Resend inbox delivery/received-link login remain unavailable prerequisites. Original reports and historical snapshots remain preserved; current ownership is in [handover](../handover.md).
 
 - The cumulative runtime now includes operator client CRUD/search/ten-row pagination, private metadata/company/phone/notes, archive/restore, readable activity and active-session inspection/revocation. Normalized email is unique across archived and active identities. Transactional archive immediately removes every session and pending link; restoring never revives them.
