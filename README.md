@@ -2,7 +2,7 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
-Development is ongoing. Operator/client access, projects, milestones, messages, private attachments and negotiated proposals are implemented and undergoing integrated verification. Deliverables, invoices, payments and the remaining product phases are still ahead.
+Development is ongoing. Operator/client access, projects, milestones, messages, private attachments, negotiated proposals and versioned deliverables are implemented. Invoices, payments and the remaining product features are still in development; integrated verification continues.
 
 ## Run with Docker Compose
 
@@ -35,6 +35,8 @@ The operator signs in at `/login`. Create clients in the dashboard, then generat
 Create a project, choose its primary and additional client members, add milestones and send it for lock-in. An eligible member reviews and agrees the scope; the project becomes active. The operator can pause/resume work, and only the current primary client can approve a milestone in review.
 
 General conversations and project conversations support private messages and attachments. Either party can propose a project in the general conversation, counter its terms or reject it. Accepting the latest proposal creates one active project with the agreed budget and ordered milestones. Manually created projects keep their separate lock-in workflow.
+
+Upload deliverables from a milestone in the project workspace, choosing a new file or a version of an existing deliverable. Every version starts locked. The operator can release or relock each version independently; clients can download only currently released versions, including in the version history. Deliverables use the same private local or S3 storage and per-file size limit as attachments, with one file per upload. Ordinary message attachments remain available without a release or payment gate.
 
 Run one long-lived application process. Live updates, rate limits and scheduled access cleanup use that process; multiple replicas are not currently supported.
 
