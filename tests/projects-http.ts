@@ -146,8 +146,19 @@ try {
   assert.equal(foreign.response.status, 404);
   assert.deepEqual(foreign.error, absent.error);
   assert.equal(
-    (await call(path, "PATCH", { budget: 2147483648 }, operator)).response
-      .status,
+    (
+      await call(
+        path,
+        "PATCH",
+        {
+          budget: 2147483648,
+          expectedRevision: versions.parse(
+            (await call(path, "GET", undefined, operator)).data,
+          ).editRevision,
+        },
+        operator,
+      )
+    ).response.status,
     400,
   );
   assert.equal(

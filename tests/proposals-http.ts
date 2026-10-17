@@ -166,7 +166,11 @@ async function historicalDates(
   for (const recovery of ["reject", "counter"] as const) {
     const proposalId = randomUUID();
     // Preserve the format accepted before the date boundary was repaired.
-    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${String(actor[0].id)},'Historical unsupported date',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::jsonb)`;
+    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${String(actor[0].id)},'Historical unsupported date',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::text::jsonb)`;
+    const stored = await getSql()<
+      { shape: string }[]
+    >`select jsonb_typeof(proposal_data) as shape from messages where id=${proposalId}`;
+    assert.equal(stored[0]?.shape, "object");
     const cards = page.parse(
       (await call(path, "GET", undefined, client.cookie)).data,
     );

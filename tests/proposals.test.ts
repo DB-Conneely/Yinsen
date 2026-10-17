@@ -179,7 +179,11 @@ describe("proposal authority and shared transaction writers", () => {
     };
     const proposalId = randomUUID();
     // Fixture represents a proposal genuinely accepted by the earlier write schema.
-    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${operator.id},'Historic date proposal',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::jsonb)`;
+    await getSql()`insert into messages(id,client_id,sender_type,sender_id,body,fingerprint,type,chain_id,proposal_data) values(${proposalId},${client.id},'operator',${operator.id},'Historic date proposal',${proposalId},'proposal',${proposalId},${JSON.stringify(historic)}::text::jsonb)`;
+    const stored = await getSql()<
+      { shape: string }[]
+    >`select jsonb_typeof(proposal_data) as shape from messages where id=${proposalId}`;
+    expect(stored[0]?.shape).toBe("object");
     const cards = await listMessages(conversation, client);
     expect(
       cards.messages.find((row) => row.id === proposalId)?.proposal,
