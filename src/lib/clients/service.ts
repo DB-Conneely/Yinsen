@@ -101,6 +101,44 @@ export async function listClients(
   };
 }
 
+function mergeClientFields(
+  current: Client | undefined,
+  data: Partial<z.infer<typeof clientInput>>,
+): z.infer<typeof clientInput> {
+  if (current?.deletedAt)
+    throw new AppError(
+      409,
+      "CLIENT_ARCHIVED",
+      "Restore this client before editing.",
+    );
+  const fields = { ...current, ...data };
+  return clientInput.parse({
+    name: fields.name,
+    email: fields.email,
+    company: fields.company,
+    phone: fields.phone,
+    notes: fields.notes,
+    metadata: fields.metadata,
+  });
+}
+
+async function writeClientFields(
+  sql: postgres.TransactionSql,
+  fields: z.infer<typeof clientInput>,
+  id?: string,
+): Promise<string> {
+  const rows = id
+    ? await sql<
+        { id: string }[]
+      >`update clients set name=${fields.name}, email=${fields.email}, company=${fields.company}, phone=${fields.phone}, notes=${fields.notes}, metadata=${JSON.stringify(fields.metadata)}::jsonb, updated_at=now() where id=${id} returning id`
+    : await sql<
+        { id: string }[]
+      >`insert into clients (name,email,company,phone,notes,metadata) values (${fields.name},${fields.email},${fields.company},${fields.phone},${fields.notes},${JSON.stringify(fields.metadata)}::jsonb) returning id`;
+  if (!rows[0])
+    throw new AppError(503, "SAVE_FAILED", "Unable to save client.");
+  return rows[0].id;
+}
+
 export async function saveClient(
   input: unknown,
   actor: { id: string; role: "operator" },
@@ -111,42 +149,17 @@ export async function saveClient(
     return await getSql().begin(async (sql) => {
       if (id) await lockClient(sql, id);
       const current = id ? await getClient(id, sql) : undefined;
-      if (current?.deletedAt)
-        throw new AppError(
-          409,
-          "CLIENT_ARCHIVED",
-          "Restore this client before editing.",
-        );
-      const fields = { ...current, ...data };
-      const parsed = clientInput.parse(
-        fields && {
-          name: fields.name,
-          email: fields.email,
-          company: fields.company,
-          phone: fields.phone,
-          notes: fields.notes,
-          metadata: fields.metadata,
-        },
-      );
-      const rows = id
-        ? await sql<
-            { id: string }[]
-          >`update clients set name=${parsed.name}, email=${parsed.email}, company=${parsed.company}, phone=${parsed.phone}, notes=${parsed.notes}, metadata=${JSON.stringify(parsed.metadata)}::jsonb, updated_at=now() where id=${id} returning id`
-        : await sql<
-            { id: string }[]
-          >`insert into clients (name,email,company,phone,notes,metadata) values (${parsed.name},${parsed.email},${parsed.company},${parsed.phone},${parsed.notes},${JSON.stringify(parsed.metadata)}::jsonb) returning id`;
-      const saved = rows[0];
-      if (!saved)
-        throw new AppError(503, "SAVE_FAILED", "Unable to save client.");
+      const parsed = mergeClientFields(current, data);
+      const savedId = await writeClientFields(sql, parsed, id);
       if (current && current.email !== parsed.email)
-        await sql`delete from magic_link_tokens where client_id=${saved.id}`;
+        await sql`delete from magic_link_tokens where client_id=${savedId}`;
       await recordActivity(
         sql,
-        saved.id,
+        savedId,
         actor,
         id ? "client.updated" : "client.created",
       );
-      return getClient(saved.id, sql);
+      return getClient(savedId, sql);
     });
   } catch (error: unknown) {
     // Next's separate server bundles can contain distinct PostgresError classes.
