@@ -44,6 +44,9 @@ const clientSchema = z.object({
   id: z.uuid(),
   email: z.email(),
   name: z.string(),
+  company: z.string(),
+  phone: z.string(),
+  notes: z.string(),
   metadata: z.record(z.string(), z.string()),
 });
 try {
@@ -61,6 +64,8 @@ try {
         name: "HTTP Client",
         email: ` ${email.toUpperCase()} `,
         notes: "Operator-only",
+        company: "HTTP Company",
+        phone: "01234",
         metadata: { category: "Proof" },
       },
       operator,
@@ -69,6 +74,57 @@ try {
   );
   assert.equal(client.email, email);
   assert.deepEqual(client.metadata, { category: "Proof" });
+  for (const body of [
+    { name: "HTTP Renamed" },
+    {},
+    { metadata: { category: "Updated" } },
+  ]) {
+    const edited = await data(
+      await write(`/api/clients/${client.id}`, body, operator, "PATCH"),
+      clientSchema,
+    );
+    assert.equal(edited.name, "HTTP Renamed");
+    assert.equal(edited.company, "HTTP Company");
+    assert.equal(edited.phone, "01234");
+    assert.equal(edited.notes, "Operator-only");
+    assert.deepEqual(
+      edited.metadata,
+      "metadata" in body ? body.metadata : client.metadata,
+    );
+    const persisted =
+      await sql`select company, phone, notes from clients where id=${client.id}`;
+    assert.deepEqual(persisted[0], {
+      company: "HTTP Company",
+      phone: "01234",
+      notes: "Operator-only",
+    });
+  }
+  const pendingIdentity = await data(
+    await write(`/api/clients/${client.id}/generate-link`, {}, operator),
+    z.object({ url: z.url() }),
+  );
+  const nextEmail = `${randomUUID()}@example.test`;
+  await data(
+    await write(
+      `/api/clients/${client.id}`,
+      { email: nextEmail },
+      operator,
+      "PATCH",
+    ),
+    clientSchema,
+  );
+  assert.equal(
+    (
+      await write("/api/auth/verify", {
+        token: new URL(pendingIdentity.url).hash.slice(1),
+      })
+    ).status,
+    401,
+  );
+  await data(
+    await write(`/api/clients/${client.id}`, { email }, operator, "PATCH"),
+    clientSchema,
+  );
   assert.equal(
     (await write("/api/clients", { name: "Duplicate", email }, operator))
       .status,

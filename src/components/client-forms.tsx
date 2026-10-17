@@ -205,9 +205,14 @@ export function ClientActions({
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const cancel = useRef<HTMLButtonElement>(null);
+  const archive = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (confirm) cancel.current?.focus();
   }, [confirm]);
+  function cancelArchive(): void {
+    setConfirm(false);
+    archive.current?.focus();
+  }
   async function action(kind: "archive" | "restore" | "link"): Promise<void> {
     setPending(true);
     setError("");
@@ -256,6 +261,7 @@ export function ClientActions({
               Generate login link
             </button>
             <button
+              ref={archive}
               disabled={pending}
               className="secondary"
               onClick={() => setConfirm(true)}
@@ -267,10 +273,10 @@ export function ClientActions({
       </div>
       {confirm && (
         <div
-          role="alertdialog"
+          role="group"
           aria-label="Archive client confirmation"
           onKeyDown={(event) => {
-            if (event.key === "Escape") setConfirm(false);
+            if (event.key === "Escape") cancelArchive();
           }}
         >
           <p>
@@ -285,11 +291,7 @@ export function ClientActions({
           >
             Confirm archive
           </button>{" "}
-          <button
-            ref={cancel}
-            className="secondary"
-            onClick={() => setConfirm(false)}
-          >
+          <button ref={cancel} className="secondary" onClick={cancelArchive}>
             Cancel
           </button>
         </div>

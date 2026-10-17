@@ -78,6 +78,17 @@ function escapeHtml(value: string): string {
   );
 }
 
+function actionTextColour(background: string): "#000000" | "#ffffff" {
+  const channels = background.match(/[a-f0-9]{2}/gi) ?? [];
+  const luminance = channels.reduce((sum, channel, index) => {
+    const value = parseInt(channel, 16) / 255;
+    const linear =
+      value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    return sum + linear * ([0.2126, 0.7152, 0.0722][index] ?? 0);
+  }, 0);
+  return luminance > 0.179 ? "#000000" : "#ffffff";
+}
+
 export async function sendMagicLink(input: {
   to: string;
   name: string;
@@ -89,7 +100,7 @@ export async function sendMagicLink(input: {
   const email = readConfiguration().email;
   if (!email)
     throw new AppError(503, "EMAIL_UNAVAILABLE", "Email is not configured.");
-  const html = `<div style="max-width:600px;margin:auto;font-family:system-ui"><h1>${escapeHtml(input.brandName)}</h1><p>Hi ${escapeHtml(input.name)},</p><p>Use this single-use link to sign in. It expires in 15 minutes.</p><p><a style="display:inline-block;padding:16px;background:${escapeHtml(input.brandColour)};color:white" href="${escapeHtml(input.url)}">Sign in to your portal</a></p><p>If you did not request this, ignore this email.</p></div>`;
+  const html = `<div style="max-width:600px;margin:auto;font-family:system-ui"><h1>${escapeHtml(input.brandName)}</h1><p>Hi ${escapeHtml(input.name)},</p><p>Use this single-use link to sign in. It expires in 15 minutes.</p><p><a style="display:inline-block;padding:16px;background:${escapeHtml(input.brandColour)};color:${actionTextColour(input.brandColour)}" href="${escapeHtml(input.url)}">Sign in to your portal</a></p><p>If you did not request this, ignore this email.</p></div>`;
   const result = z.object({ id: z.uuid() }).safeParse(
     await resend(
       "/emails",

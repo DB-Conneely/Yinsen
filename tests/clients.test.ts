@@ -27,7 +27,6 @@ import {
   listClientSessions,
   redeemMagicLink,
   requestMagicLink,
-  requireClientToken,
   revokeClientSession,
   validateClientSession,
 } from "../src/lib/auth/client";
@@ -116,6 +115,38 @@ afterAll(async () => {
 });
 
 describe("client management through real writers and route callers", () => {
+  it("preserves omitted PATCH fields, including an empty and metadata-only update", async () => {
+    const client = await saveClient(
+      { ...newInput(), company: "Preserved", phone: "01234", notes: "Private" },
+      operator.user,
+    );
+    const context = { params: Promise.resolve({ id: client.id }) };
+    for (const body of [{ name: "Renamed" }, {}, { metadata: { code: "B" } }]) {
+      expect(
+        (await update(request("/", operator.session.token, body), context))
+          .status,
+      ).toBe(200);
+      expect(await getClient(client.id)).toMatchObject({
+        name: "Renamed",
+        email: client.email,
+        company: "Preserved",
+        phone: "01234",
+        notes: "Private",
+        metadata: "metadata" in body ? body.metadata : client.metadata,
+      });
+    }
+    await saveClient(
+      { company: "", phone: "", notes: "", metadata: {} },
+      operator.user,
+      client.id,
+    );
+    expect(await getClient(client.id)).toMatchObject({
+      company: "",
+      phone: "",
+      notes: "",
+      metadata: {},
+    });
+  });
   it("normalizes uniqueness including archived clients; restores the original identity", async () => {
     const input = newInput();
     const client = await saveClient(
@@ -332,7 +363,7 @@ describe("client token and session invariants after actual Drizzle initializatio
       throw new TypeError("Expected redeemed session");
     const before = await listClientSessions(client.id);
     expect(before).toHaveLength(1);
-    expect(await requireClientToken(session.value.token)).toMatchObject({
+    expect(await validateClientSession(session.value.token)).toMatchObject({
       id: client.id,
       role: "client",
     });
@@ -343,9 +374,7 @@ describe("client token and session invariants after actual Drizzle initializatio
     await getSql()`update client_sessions set expires_at=now()-interval '1 second' where client_id=${client.id}`;
     expect(await validateClientSession(session.value.token)).toBeNull();
     await destroyClientSession(session.value.token);
-    await expect(requireClientToken(undefined)).rejects.toMatchObject({
-      statusCode: 401,
-    });
+    expect(await validateClientSession(undefined)).toBeNull();
     expect(await validateClientSession("malformed")).toBeNull();
   });
   it("expires tokens, revokes sessions and pending links immediately and never revives them on restore", async () => {
@@ -383,6 +412,62 @@ describe("client token and session invariants after actual Drizzle initializatio
       statusCode: 401,
     });
     expect((await listClientSessions(client.id)).length).toBe(0);
+  });
+  it("invalidates pending credentials only when the normalized email changes", async () => {
+    const client = await newClient();
+    const retained = await issueMagicLink(
+      client.id,
+      operator.user,
+      client.email,
+    );
+    await saveClient(
+      { email: ` ${client.email.toUpperCase()} `, name: "Renamed" },
+      operator.user,
+      client.id,
+    );
+    await expect(
+      redeemMagicLink({ token: retained.token }),
+    ).resolves.toHaveProperty("token");
+    const old = await issueMagicLink(client.id, operator.user, client.email);
+    const changedEmail = `${randomUUID()}@example.test`;
+    await saveClient({ email: changedEmail }, operator.user, client.id);
+    await saveClient(
+      { name: "New address holder", email: client.email },
+      operator.user,
+    );
+    await expect(redeemMagicLink({ token: old.token })).rejects.toMatchObject({
+      statusCode: 401,
+    });
+    await expect(
+      issueMagicLink(client.id, operator.user, client.email),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    const fresh = await issueMagicLink(client.id, operator.user, changedEmail);
+    const session = await redeemMagicLink({ token: fresh.token });
+    expect(await validateClientSession(session.token)).toMatchObject({
+      id: client.id,
+      email: changedEmail,
+    });
+  });
+  it("serializes email edits with credential issuance and redemption", async () => {
+    const client = await newClient();
+    const old = await issueMagicLink(client.id, operator.user, client.email);
+    const changedEmail = `${randomUUID()}@example.test`;
+    const result = await Promise.allSettled([
+      issueMagicLink(client.id, operator.user, client.email),
+      saveClient({ email: changedEmail }, operator.user, client.id),
+      redeemMagicLink({ token: old.token }),
+    ]);
+    expect(result[1]?.status).toBe("fulfilled");
+    const issued = result[0];
+    if (issued?.status === "fulfilled")
+      await expect(
+        redeemMagicLink({ token: issued.value.token }),
+      ).rejects.toMatchObject({ statusCode: 401 });
+    expect(
+      (
+        await getSql()`select token_hash from magic_link_tokens where client_id=${client.id}`
+      ).length,
+    ).toBe(0);
   });
   it("limits requests by normalized email and independent transport buckets", () => {
     for (let index = 0; index < 3; index++)
@@ -438,7 +523,7 @@ describe("native Resend boundary with actual owned caller/database", () => {
     );
     expect(await verifyEmail()).toBe("failed");
   });
-  it("produces escaped branded 15-minute links and generic responses; failures invalidate pending tokens", async () => {
+  it("produces escaped branded 15-minute links and the current generic response; failures invalidate pending tokens", async () => {
     configureEmail();
     const client = await newClient();
     const sent: { url: string; options: RequestInit }[] = [];
@@ -449,12 +534,16 @@ describe("native Resend boundary with actual owned caller/database", () => {
         return Promise.resolve(Response.json({ id: randomUUID() }));
       }),
     );
+    let started = performance.now();
     const known = await requestMagicLink({
       email: ` ${client.email.toUpperCase()} `,
     });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10900);
+    started = performance.now();
     const unknown = await requestMagicLink({
       email: `${randomUUID()}@example.test`,
     });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10900);
     expect(known).toEqual(unknown);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.url).toBe("https://api.resend.com/emails");
@@ -491,7 +580,9 @@ describe("native Resend boundary with actual owned caller/database", () => {
         ),
       ),
     );
+    started = performance.now();
     expect(await requestMagicLink({ email: client.email })).toEqual(known);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(10900);
     expect(
       (
         await getSql()`select token_hash from magic_link_tokens where client_id=${client.id}`
@@ -517,6 +608,71 @@ describe("native Resend boundary with actual owned caller/database", () => {
         key: "timeout",
       }),
     ).rejects.toMatchObject({ code: "EMAIL_UNAVAILABLE" });
+  }, 45000);
+  it("preserves an accepted email's token if only accepted-activity bookkeeping fails", async () => {
+    configureEmail();
+    const client = await newClient();
+    let token: string | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options: RequestInit) => {
+        const body = z
+          .object({ text: z.string() })
+          .parse(JSON.parse(String(options.body)) as unknown);
+        token = body.text.match(/\/portal\/verify#([a-f0-9]{64})/)?.[1];
+        return Promise.resolve(Response.json({ id: randomUUID() }));
+      }),
+    );
+    const admin = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
+      max: 1,
+    });
+    try {
+      await admin`create function patch13_fail_accepted() returns trigger language plpgsql as $$ begin if NEW.event_type = 'client.email_accepted' then raise exception 'selective accepted activity failure'; end if; return NEW; end $$`;
+      await admin`create trigger patch13_accepted_failure before insert on activity_events for each row execute function patch13_fail_accepted()`;
+      await requestMagicLink({ email: client.email });
+      const session = await redeemMagicLink({ token });
+      expect(await validateClientSession(session.token)).toMatchObject({
+        id: client.id,
+      });
+      expect(
+        (await clientActivity(client.id)).map((entry) => entry.eventType),
+      ).not.toContain("client.email_failed");
+    } finally {
+      await admin`drop trigger if exists patch13_accepted_failure on activity_events`;
+      await admin`drop function if exists patch13_fail_accepted()`;
+      await admin.end();
+    }
+  }, 20000);
+  it("generates readable email actions for extreme and default brand colours", async () => {
+    configureEmail();
+    const html: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options: RequestInit) => {
+        html.push(
+          z
+            .object({ html: z.string() })
+            .parse(JSON.parse(String(options.body)) as unknown).html,
+        );
+        return Promise.resolve(Response.json({ id: randomUUID() }));
+      }),
+    );
+    for (const brandColour of ["#ffffff", "#000000", "#ffff00", "#315e9e"])
+      await sendMagicLink({
+        to: "colour@example.test",
+        name: "Client",
+        url: origin,
+        brandName: "Brand",
+        brandColour,
+        key: randomUUID(),
+      });
+    for (const [index, foreground] of [
+      "#000000",
+      "#ffffff",
+      "#000000",
+      "#ffffff",
+    ].entries())
+      expect(html[index]).toContain(`color:${foreground}`);
   });
 });
 

@@ -4,22 +4,27 @@ import { getSql } from "../db/client";
 import { AppError } from "../errors";
 import { emailSchema } from "../auth/validation";
 
-export const clientInput = z
+const clientFields = z
   .object({
     name: z.string().trim().min(1).max(255),
     email: emailSchema,
-    company: z.string().trim().max(255).default(""),
-    phone: z.string().trim().max(50).default(""),
-    notes: z.string().trim().max(3000).default(""),
+    company: z.string().trim().max(255),
+    phone: z.string().trim().max(50),
+    notes: z.string().trim().max(3000),
     metadata: z
       .record(z.string().trim().min(1).max(50), z.string().max(500))
       .refine(
         (value) => Object.keys(value).length <= 20,
         "Use at most 20 custom fields.",
-      )
-      .default({}),
+      ),
   })
   .strict();
+export const clientInput = clientFields.extend({
+  company: clientFields.shape.company.default(""),
+  phone: clientFields.shape.phone.default(""),
+  notes: clientFields.shape.notes.default(""),
+  metadata: clientFields.shape.metadata.default({}),
+});
 export const clientId = z.uuid();
 const filtersSchema = z
   .object({
@@ -101,7 +106,7 @@ export async function saveClient(
   actor: { id: string; role: "operator" },
   id?: string,
 ): Promise<Client> {
-  const data = (id ? clientInput.partial() : clientInput).parse(input);
+  const data = (id ? clientFields.partial() : clientInput).parse(input);
   try {
     return await getSql().begin(async (sql) => {
       if (id) await lockClient(sql, id);
@@ -133,6 +138,8 @@ export async function saveClient(
       const saved = rows[0];
       if (!saved)
         throw new AppError(503, "SAVE_FAILED", "Unable to save client.");
+      if (current && current.email !== parsed.email)
+        await sql`delete from magic_link_tokens where client_id=${saved.id}`;
       await recordActivity(
         sql,
         saved.id,

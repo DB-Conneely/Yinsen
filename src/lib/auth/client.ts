@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { getSql } from "../db/client";
 import { AppError } from "../errors";
@@ -32,28 +33,15 @@ export async function validateClientSession(
   return rows[0] ? { ...rows[0], role: "client" } : null;
 }
 
-export async function requireClientToken(
-  token: string | undefined,
-): Promise<ClientIdentity> {
-  const identity = await validateClientSession(token);
-  if (!identity)
-    throw new AppError(
-      401,
-      "UNAUTHORIZED",
-      "Please use a new login link to continue.",
-    );
-  return identity;
-}
-
 export async function issueMagicLink(
   id: string,
   actor: { id: string; role: "operator" | "client" },
-  email = false,
-): Promise<{ url: string; token: string }> {
+  email: string | false = false,
+): Promise<{ url: string; token: string; name: string }> {
   return getSql().begin(async (sql) => {
     await lockClient(sql, id);
     const client = await getClient(id, sql);
-    if (client.deletedAt)
+    if (client.deletedAt || (email && client.email !== email))
       throw new AppError(404, "NOT_FOUND", "Client not found.");
     const token = randomBytes(32).toString("hex");
     const expires = new Date(
@@ -68,6 +56,7 @@ export async function issueMagicLink(
     );
     return {
       token,
+      name: client.name,
       url: `${readConfiguration().origin}/portal/verify#${token}`,
     };
   });
@@ -116,42 +105,72 @@ export async function requestMagicLink(
       "EMAIL_UNAVAILABLE",
       "Contact the operator for a login link.",
     );
-  const rows = await getSql()<
-    { id: string; name: string }[]
-  >`select id,name from clients where email=${email} and deleted_at is null`;
-  const client = rows[0];
-  if (client) await deliverClientLink(client, email);
-  return {
-    message:
-      "If this email belongs to an active client, a login link has been requested. Check your inbox or contact the operator.",
-  };
+  // Covers the provider's ten-second abort for unknown addresses and early failures too.
+  const responseDeadline = delay(11000);
+  try {
+    const rows = await getSql()<
+      { id: string }[]
+    >`select id from clients where email=${email} and deleted_at is null`;
+    const client = rows[0];
+    if (client) await deliverClientLink(client, email);
+    return {
+      message:
+        "If this email belongs to an active client, a login link has been requested. Check your inbox or contact the operator.",
+    };
+  } finally {
+    await responseDeadline;
+  }
 }
 
 async function deliverClientLink(
-  client: { id: string; name: string },
+  client: { id: string },
   email: string,
 ): Promise<void> {
   const actor = { id: client.id, role: "client" as const };
-  const link = await issueMagicLink(client.id, actor, true);
+  let link: Awaited<ReturnType<typeof issueMagicLink>>;
+  try {
+    link = await issueMagicLink(client.id, actor, email);
+  } catch (error: unknown) {
+    // An edit/archive can win the client lock after the public email lookup.
+    if (error instanceof AppError && error.statusCode === 404) return;
+    throw error;
+  }
   try {
     const branding = await getBranding();
     if (!branding)
       throw new AppError(503, "EMAIL_UNAVAILABLE", "Portal setup is required.");
     await sendMagicLink({
       to: email,
-      name: client.name,
+      name: link.name,
       url: link.url,
       brandName: branding.brandName,
       brandColour: branding.brandColour,
       key: `magic-link/${tokenDigest(link.token)}`,
     });
-    await recordActivity(getSql(), client.id, actor, "client.email_accepted");
   } catch {
     await getSql()`delete from magic_link_tokens where token_hash=${tokenDigest(link.token)}`;
     await recordActivity(getSql(), client.id, actor, "client.email_failed");
     logger.warn(
       { event: "email.magic_link_failed" },
       "Login email failed; manual login links remain available",
+    );
+    return;
+  }
+  await recordEmailAcceptance(client.id);
+}
+
+async function recordEmailAcceptance(id: string): Promise<void> {
+  try {
+    await recordActivity(
+      getSql(),
+      id,
+      { id, role: "client" },
+      "client.email_accepted",
+    );
+  } catch {
+    logger.warn(
+      { event: "email.accepted_activity_failed" },
+      "Login email accepted; its activity record could not be saved",
     );
   }
 }
