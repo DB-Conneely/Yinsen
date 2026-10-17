@@ -58,7 +58,7 @@ describe("installed standalone commands", () => {
     );
     writeFileSync(
       join(root, ".next/standalone/server.js"),
-      "process.stdout.write(JSON.stringify({probe:process.env.YINSEN_LAUNCHER_PROBE, secretNames:Object.keys(process.env).filter(name => ['POSTGRES_PASSWORD','MIGRATION_PASSWORD','MIGRATION_DATABASE_URL','RUNTIME_PASSWORD'].includes(name))})); process.exitCode = 7;",
+      "process.stdout.write(JSON.stringify({probe:process.env.YINSEN_LAUNCHER_PROBE, storagePath:process.env.STORAGE_LOCAL_PATH, secretNames:Object.keys(process.env).filter(name => ['POSTGRES_PASSWORD','MIGRATION_PASSWORD','MIGRATION_DATABASE_URL','RUNTIME_PASSWORD'].includes(name))})); process.exitCode = 7;",
     );
     const result = spawnSync(
       process.execPath,
@@ -68,9 +68,12 @@ describe("installed standalone commands", () => {
         env: { PATH: process.env.PATH, NODE_ENV: "production" },
       },
     );
-    expect(result.stdout.toString()).toBe(
-      '{"probe":"current-root","secretNames":[]}',
-    );
+    const output: unknown = JSON.parse(result.stdout.toString());
+    expect(output).toEqual({
+      probe: "current-root",
+      storagePath: join(root, "data/uploads"),
+      secretNames: [],
+    });
     expect(result.status, result.stderr.toString()).toBe(7);
   });
 });

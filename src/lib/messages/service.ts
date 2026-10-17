@@ -16,6 +16,8 @@ import type { MessageUpload } from "../storage/upload";
 import { conversationAccess, type Conversation } from "./access";
 import { messageRows, type MessagePage } from "./queries";
 import { resourceId } from "../projects/validation";
+import { logger } from "../logger";
+import type postgres from "postgres";
 
 async function publish(conversation: Conversation): Promise<void> {
   if (conversation.kind === "project")
@@ -26,13 +28,8 @@ async function publish(conversation: Conversation): Promise<void> {
   else publishConversation(conversation.id);
 }
 
-export async function sendMessage(
-  conversation: Conversation,
-  upload: MessageUpload,
-  actor: ProjectActor,
-): Promise<MessagePage> {
-  const created: StoredFile[] = [];
-  const fingerprint = createHash("sha256")
+function messageFingerprint(upload: MessageUpload): string {
+  return createHash("sha256")
     .update(
       JSON.stringify({
         body: upload.body,
@@ -45,53 +42,101 @@ export async function sendMessage(
       }),
     )
     .digest("hex");
+}
+
+async function persistAttachments(
+  sql: postgres.TransactionSql,
+  upload: MessageUpload,
+  created: StoredFile[],
+): Promise<void> {
+  for (const staged of upload.files) {
+    const id = randomUUID();
+    const file = {
+      key: `messages/${upload.requestId}/${id}`,
+      driver: readConfiguration().storage.driver,
+      size: staged.size,
+      mimeType: staged.mimeType,
+    };
+    created.push(file);
+    await putFile(file, staged.path);
+    await sql`insert into message_attachments(id,message_id,filename,storage_key,driver,size,mime_type,sha256) values (${id},${upload.requestId},${staged.filename},${file.key},${file.driver},${staged.size},${staged.mimeType},${staged.sha256})`;
+  }
+}
+
+async function persistMessage(
+  sql: postgres.TransactionSql,
+  conversation: Conversation,
+  upload: MessageUpload,
+  actor: ProjectActor,
+  created: StoredFile[],
+): Promise<boolean> {
+  const fingerprint = messageFingerprint(upload);
+  const existing =
+    await sql`select id,sender_id,sender_type,fingerprint,client_id,project_id from messages where id=${resourceId.parse(upload.requestId)}`;
+  const row = existing[0];
+  if (row) {
+    if (
+      row.sender_id !== actor.id ||
+      row.sender_type !== actor.role ||
+      row.fingerprint !== fingerprint ||
+      (conversation.kind === "client" ? row.client_id : row.project_id) !==
+        conversation.id
+    )
+      throw new AppError(
+        409,
+        "MESSAGE_CONFLICT",
+        "This send has changed. Start a new message.",
+      );
+    return false;
+  }
+  await sql`insert into messages(id,client_id,project_id,sender_type,sender_id,body,fingerprint,created_at) values (${upload.requestId},${conversation.kind === "client" ? conversation.id : null},${conversation.kind === "project" ? conversation.id : null},${actor.role},${actor.id},${upload.body},${fingerprint},clock_timestamp())`;
+  await persistAttachments(sql, upload, created);
+  if (conversation.kind === "project")
+    await projectActivity(sql, conversation.id, actor, "message.sent");
+  else
+    await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values (${conversation.id},${actor.role},${actor.id},'message.sent')`;
+  return true;
+}
+
+export async function sendMessage(
+  conversation: Conversation,
+  upload: MessageUpload,
+  actor: ProjectActor,
+): Promise<MessagePage> {
+  const created: StoredFile[] = [];
   let committed = false;
+  let callbackFailed = false;
   try {
-    const page = await getSql().begin(async (sql) => {
-      await conversationAccess(conversation, actor, sql, "update");
-      const existing =
-        await sql`select id,sender_id,sender_type,fingerprint,client_id,project_id from messages where id=${resourceId.parse(upload.requestId)}`;
-      if (existing.length) {
-        const row = existing[0];
-        if (
-          !row ||
-          row.sender_id !== actor.id ||
-          row.sender_type !== actor.role ||
-          row.fingerprint !== fingerprint ||
-          (conversation.kind === "client" ? row.client_id : row.project_id) !==
-            conversation.id
-        )
-          throw new AppError(
-            409,
-            "MESSAGE_CONFLICT",
-            "This send has changed. Start a new message.",
-          );
-      } else {
-        await sql`insert into messages(id,client_id,project_id,sender_type,sender_id,body,fingerprint) values (${upload.requestId},${conversation.kind === "client" ? conversation.id : null},${conversation.kind === "project" ? conversation.id : null},${actor.role},${actor.id},${upload.body},${fingerprint})`;
-        for (const staged of upload.files) {
-          const id = randomUUID();
-          const file = {
-            key: `messages/${upload.requestId}/${id}`,
-            driver: readConfiguration().storage.driver,
-            size: staged.size,
-            mimeType: staged.mimeType,
-          };
-          created.push(file);
-          await putFile(file, staged.path);
-          await sql`insert into message_attachments(id,message_id,filename,storage_key,driver,size,mime_type,sha256) values (${id},${upload.requestId},${staged.filename},${file.key},${file.driver},${staged.size},${staged.mimeType},${staged.sha256})`;
-        }
-        if (conversation.kind === "project")
-          await projectActivity(sql, conversation.id, actor, "message.sent");
-        else
-          await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values (${conversation.id},${actor.role},${actor.id},'message.sent')`;
+    const result = await getSql().begin(async (sql) => {
+      try {
+        await conversationAccess(conversation, actor, sql, "update");
+        const changed = await persistMessage(
+          sql,
+          conversation,
+          upload,
+          actor,
+          created,
+        );
+        return { changed, page: await messageRows(sql, conversation, actor) };
+      } catch (error: unknown) {
+        callbackFailed = true;
+        throw error;
       }
-      return messageRows(sql, conversation, actor);
     });
     committed = true;
-    await publish(conversation);
-    return page;
+    if (result.changed) await publish(conversation);
+    return result.page;
   } finally {
-    if (!committed) await removeFailedFiles(created);
+    // Only a failed callback proves COMMIT was never requested. A lost COMMIT reply retains bytes.
+    if (!committed && callbackFailed) await removeFailedFiles(created);
+    else if (!committed && created.length)
+      logger.error(
+        {
+          event: "storage.commit_uncertain",
+          keys: created.map((file) => file.key),
+        },
+        "Message commit uncertain; private files retained for safe retry or operator recovery",
+      );
     await upload.cleanup();
   }
 }

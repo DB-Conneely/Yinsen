@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import { z } from "zod";
+import { AppError } from "../lib/errors";
 import type { Conversation } from "../lib/messages/access";
 import type { Message, MessagePage } from "../lib/messages/queries";
 
@@ -44,7 +45,9 @@ const pageSchema = z.object({
 async function responsePage(response: Response): Promise<MessagePage> {
   const result = pageSchema.parse(await response.json());
   if (!response.ok || !result.data)
-    throw new Error(
+    throw new AppError(
+      response.status,
+      "MESSAGES_UNAVAILABLE",
       result.error?.message ?? "Messages could not be loaded. Please retry.",
     );
   return result.data;
@@ -74,7 +77,9 @@ function useVisibleReads(
           body: JSON.stringify({ ...conversation, ids }),
         });
         if (!response.ok)
-          throw new Error(
+          throw new AppError(
+            response.status,
+            "READ_FAILED",
             "Read status could not be saved. Retry when your connection recovers.",
           );
         setError("");
@@ -97,7 +102,7 @@ function useVisibleReads(
           .filter(Boolean);
         if (ids.length) void mark(ids);
       },
-      { threshold: 0.6 },
+      { threshold: 1 },
     );
     const observe = (): void => {
       for (const node of root.current?.querySelectorAll("[data-unread-id]") ??
@@ -124,9 +129,6 @@ function MessageBubble({
   return (
     <article
       className={`message-bubble ${message.senderId === actorId ? "message-own" : ""}`}
-      data-unread-id={
-        !message.read && message.senderId !== actorId ? message.id : undefined
-      }
     >
       <header>
         <strong>{message.senderName}</strong>
@@ -152,6 +154,13 @@ function MessageBubble({
           ))}
         </ul>
       )}
+      <span
+        className="message-seen-marker"
+        aria-hidden="true"
+        data-unread-id={
+          !message.read && message.senderId !== actorId ? message.id : undefined
+        }
+      />
     </article>
   );
 }
@@ -299,10 +308,16 @@ export function MessageThread({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const root = useRef<HTMLElement>(null);
-  const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
   const generation = useRef(0);
   const endpoint = `/api/${conversation.kind === "client" ? "clients" : "projects"}/${conversation.id}/messages`;
   const reads = useVisibleReads(conversation, page.messages, root);
+  const lastMessageId = page.messages.at(-1)?.id;
+  useEffect(() => {
+    if (follow.current && list.current)
+      list.current.scrollTop = list.current.scrollHeight;
+  }, [lastMessageId]);
   const load = useCallback(
     (before?: string): Promise<void> => {
       const current = ++generation.current;
@@ -350,9 +365,9 @@ export function MessageThread({
   const sent = (result: MessagePage): void => {
     setSearch("");
     setPage(result);
-    requestAnimationFrame(() =>
-      end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
-    );
+    requestAnimationFrame(() => {
+      if (list.current) list.current.scrollTop = list.current.scrollHeight;
+    });
   };
   return (
     <section
@@ -424,11 +439,18 @@ export function MessageThread({
           </button>
         </div>
       )}
-      <div className="message-list">
+      <div
+        className="message-list"
+        ref={list}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          follow.current =
+            node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+        }}
+      >
         {page.messages.map((message) => (
           <MessageBubble key={message.id} message={message} actorId={actorId} />
         ))}
-        <div ref={end} />
       </div>
       {reads.error && (
         <div role="alert">

@@ -24,6 +24,7 @@ export default async function MessagesPage(): Promise<ReactElement> {
         </div>
       </div>
       <MessageThread
+        key={actor.id}
         conversation={{ kind: "client", id: actor.id }}
         actorId={actor.id}
         maxBytes={readConfiguration().storage.maxBytes}

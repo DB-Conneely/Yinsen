@@ -115,6 +115,7 @@ export default async function ClientDetail({
       {!client.deletedAt && (
         <ProjectLive clientId={id}>
           <MessageThread
+            key={id}
             conversation={{ kind: "client", id }}
             actorId={identity.id}
             maxBytes={readConfiguration().storage.maxBytes}

@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { z } from "zod";
+import { AppError } from "../lib/errors";
 import type { ConversationSummary } from "../lib/messages/queries";
 
 const summarySchema = z.object({
@@ -37,7 +38,12 @@ export function MessageNotifications({
     const refresh = async (): Promise<void> => {
       try {
         const response = await fetch("/api/messages", { cache: "no-store" });
-        if (!response.ok) throw new Error("Message notifications unavailable");
+        if (!response.ok)
+          throw new AppError(
+            response.status,
+            "NOTIFICATIONS_UNAVAILABLE",
+            "Message notifications unavailable",
+          );
         const data = summarySchema.parse(await response.json()).data;
         if (active) {
           if (previous !== undefined && data.total > previous)

@@ -996,6 +996,14 @@ footer {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4) 0;
+  max-height: 32rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.message-seen-marker {
+  display: block;
+  height: 1px;
+  width: 1px;
 }
 .message-bubble {
   max-width: 88%;

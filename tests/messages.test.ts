@@ -236,6 +236,13 @@ describe("actual conversation writers, bounded files and current authorization",
         ]),
       ),
     ).rejects.toMatchObject({ statusCode: 413 });
+    const boundary = await readMessageUpload(
+      request("Exact size", [
+        { filename: "exact.txt", body: text("x".repeat(1048576)) },
+      ]),
+    );
+    expect(boundary.files[0]?.size).toBe(1048576);
+    await boundary.cleanup();
     const cross = request("cross");
     cross.headers.set("origin", "https://foreign.example");
     await expect(readMessageUpload(cross)).rejects.toMatchObject({
@@ -247,6 +254,11 @@ describe("actual conversation writers, bounded files and current authorization",
     const invalid = request("bad");
     invalid.headers.set("content-type", "multipart/form-data; boundary=wrong");
     await expect(readMessageUpload(invalid)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    const missing = request("Missing boundary");
+    missing.headers.set("content-type", "multipart/form-data;");
+    await expect(readMessageUpload(missing)).rejects.toMatchObject({
       statusCode: 400,
     });
   });
@@ -375,6 +387,13 @@ describe("actual conversation writers, bounded files and current authorization",
       send(project, "Foreign write", outsider),
     ).rejects.toMatchObject({ statusCode: 404 });
     await conversationAccess(general, primary);
+    await expect(
+      listMessages(project, primary, { before: "9999999999999999999" }),
+    ).rejects.toBeDefined();
+    expect(
+      (await listMessages(project, primary, { before: "9223372036854775807" }))
+        .messages.length,
+    ).toBeGreaterThan(0);
   });
   it("rolls messages, metadata and activity back on genuine database failure without publishing", async () => {
     const owner = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {

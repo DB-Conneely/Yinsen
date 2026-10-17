@@ -54,7 +54,7 @@ function unavailable(): AppError {
   return new AppError(
     503,
     "STORAGE_UNAVAILABLE",
-    "File storage is unavailable. Your message has not been sent. Please retry or contact the operator.",
+    "File storage is unavailable. Please retry or contact the operator.",
   );
 }
 

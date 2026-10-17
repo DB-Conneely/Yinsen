@@ -28,6 +28,10 @@ const filters = z
     before: z
       .string()
       .regex(/^[1-9][0-9]{0,18}$/)
+      .refine(
+        (value) => value.length < 19 || value <= "9223372036854775807",
+        "Message cursor is outside the supported range.",
+      )
       .optional(),
     since: z.iso.datetime({ offset: true }).optional(),
     search: z.string().trim().max(100).default(""),

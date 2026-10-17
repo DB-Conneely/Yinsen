@@ -48,6 +48,23 @@ function invalid(message: string, status = 400): AppError {
   );
 }
 
+function storageFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    ["EACCES", "ENOSPC", "EIO", "EROFS", "EDQUOT"].includes(error.code)
+  );
+}
+
+function unavailable(): AppError {
+  return new AppError(
+    503,
+    "STORAGE_UNAVAILABLE",
+    "File staging is unavailable. Your message has not been sent. Please retry or contact the operator.",
+  );
+}
+
 export function attachmentType(filename: string, mimeType: string): string {
   const type = types[extname(filename).toLowerCase()];
   if (
@@ -126,11 +143,34 @@ async function stageFile(
     }),
     createWriteStream(path, { flags: "wx", mode: 0o600 }),
   );
-  if (stream.truncated)
+  if (stream.truncated || size > readConfiguration().storage.maxBytes)
     throw invalid("An attachment exceeds the configured upload limit.", 413);
   const file = { path, filename, mimeType, size, sha256: hash.digest("hex") };
   await verifySignature(file);
   return file;
+}
+
+function multipartParser(
+  headers: Headers,
+  max: number,
+): ReturnType<typeof busboy> {
+  try {
+    return busboy({
+      headers: Object.fromEntries(headers),
+      preservePath: true,
+      defParamCharset: "utf8",
+      // Busboy marks an exactly reached limit truncated; allow one byte to distinguish overflow.
+      limits: {
+        files: 5,
+        fields: 2,
+        parts: 7,
+        fileSize: max + 1,
+        fieldSize: 16000,
+      },
+    });
+  } catch {
+    throw invalid("Send a valid multipart/form-data boundary.");
+  }
 }
 
 async function parseMultipart(
@@ -140,12 +180,7 @@ async function parseMultipart(
   const max = readConfiguration().storage.maxBytes;
   const tasks: Promise<Upload>[] = [];
   const fields: Record<string, string> = {};
-  const parser = busboy({
-    headers: Object.fromEntries(request.headers),
-    preservePath: true,
-    defParamCharset: "utf8",
-    limits: { files: 5, fields: 2, parts: 7, fileSize: max, fieldSize: 16000 },
-  });
+  const parser = multipartParser(request.headers, max);
   let failure: unknown;
   const fail = (error: unknown): void => {
     failure ??= error;
@@ -209,6 +244,7 @@ async function parseMultipart(
     failure ??= error;
   }
   const outcomes = await Promise.allSettled(tasks);
+  if (storageFailure(failure)) throw unavailable();
   if (failure)
     throw failure instanceof AppError
       ? failure
@@ -245,8 +281,13 @@ export async function readMessageUpload(
       "Send a multipart/form-data message.",
     );
   const staging = join(config.storage.path, ".staging");
-  await mkdir(staging, { recursive: true, mode: 0o700 });
-  const directory = await mkdtemp(join(staging, "message-"));
+  let directory: string;
+  try {
+    await mkdir(staging, { recursive: true, mode: 0o700 });
+    directory = await mkdtemp(join(staging, "message-"));
+  } catch {
+    throw unavailable();
+  }
   const cleanup = (): Promise<void> =>
     rm(directory, { recursive: true, force: true });
   try {

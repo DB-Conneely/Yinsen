@@ -18,6 +18,13 @@ export async function conversationAccess(
       await sql`select id from projects where id=${id} for update`;
     else await sql`select id from projects where id=${id} for share`;
     await projectAccess(id, actor, sql);
+    if (actor.role === "client") {
+      // Match archive/session-revocation's client lock while this conversation operation runs.
+      const active =
+        await sql`select id from clients where id=${actor.id} and deleted_at is null for share`;
+      if (!active.length)
+        throw new AppError(404, "NOT_FOUND", "Project not found.");
+    }
   } else {
     const rows =
       lock === "update"

@@ -256,6 +256,7 @@ export async function ProjectWorkspace({
         )}
       </section>
       <MessageThread
+        key={id}
         conversation={{ kind: "project", id }}
         actorId={actor.id}
         maxBytes={readConfiguration().storage.maxBytes}
