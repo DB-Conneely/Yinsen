@@ -524,3 +524,76 @@ export const invoiceMilestones = pgTable(
   },
   (table) => [primaryKey({ columns: [table.invoiceId, table.milestoneId] })],
 );
+
+export const checkoutAttempts = pgTable(
+  "checkout_attempts",
+  {
+    id: uuid().primaryKey(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id),
+    fingerprint: text().notNull(),
+    accountId: text("account_id").notNull(),
+    livemode: boolean().notNull(),
+    amount: integer().notNull(),
+    currency: text().notNull(),
+    providerAmount: bigint("provider_amount", { mode: "number" }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    parameters: jsonb()
+      .$type<import("stripe").Stripe.Checkout.SessionCreateParams>()
+      .notNull(),
+    sessionId: text("session_id").unique(),
+    state: text()
+      .$type<"uncertain" | "open" | "complete" | "expired" | "failed">()
+      .notNull()
+      .default("uncertain"),
+    problem: text(),
+    expirationFailed: boolean("expiration_failed").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("checkout_invoice").on(table.invoiceId),
+    uniqueIndex("checkout_one_active")
+      .on(table.invoiceId)
+      .where(sql`${table.state} in ('uncertain','open')`),
+    check(
+      "checkout_state",
+      sql`${table.state} in ('uncertain','open','complete','expired','failed')`,
+    ),
+    check(
+      "checkout_amount",
+      sql`${table.amount}>0 and ${table.providerAmount}>0`,
+    ),
+  ],
+);
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text().primaryKey(),
+  type: text().notNull(),
+  attemptId: uuid("attempt_id").references(() => checkoutAttempts.id),
+  outcome: text().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const stripePayments = pgTable("stripe_payments", {
+  paymentId: text("payment_id").primaryKey(),
+  attemptId: uuid("attempt_id")
+    .notNull()
+    .references(() => checkoutAttempts.id),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => stripeEvents.id),
+  sessionId: text("session_id").notNull(),
+  amount: bigint({ mode: "number" }).notNull(),
+  currency: text().notNull(),
+  exception: text(),
+  resolution: text(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

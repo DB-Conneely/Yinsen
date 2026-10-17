@@ -1,6 +1,6 @@
 import { AppError } from "./errors";
 
-function currencyDigits(currency: string): number {
+export function currencyDigits(currency: string): number {
   if (!/^[A-Z]{3}$/.test(currency))
     throw new AppError(
       400,

@@ -1069,6 +1069,12 @@ dd {
 .invoice-action-panel {
   margin-top: var(--space-4);
 }
+.invoice-payment-record code {
+  overflow-wrap: anywhere;
+}
+.invoice-pay-control {
+  max-width: 30rem;
+}
 .invoice-share {
   margin-top: var(--space-4);
 }

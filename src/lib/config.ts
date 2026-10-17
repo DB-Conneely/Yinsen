@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
   APP_ORIGIN: z.url(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
   DATABASE_SSL: z.enum(["disable", "verify-full"]).default("verify-full"),
   RESEND_API_KEY: z.preprocess(
     (value) => (value === "" ? undefined : value),
@@ -40,6 +42,7 @@ export type Configuration = {
   origin: string;
   ssl: false | { rejectUnauthorized: true };
   email?: { key: string; from: string };
+  stripe?: { key: string; webhookSecret: string };
   storage: StorageConfiguration;
 };
 
@@ -149,6 +152,20 @@ export function readConfiguration(
     );
   }
   const origin = new URL(result.data.APP_ORIGIN);
+  const stripeKey = result.data.STRIPE_SECRET_KEY || undefined;
+  const webhookSecret = result.data.STRIPE_WEBHOOK_SECRET || undefined;
+  if ((stripeKey || webhookSecret) && !(stripeKey && webhookSecret))
+    throw new ConfigurationError(
+      "Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET together, or omit both. See .env.example.",
+    );
+  if (
+    stripeKey &&
+    (!/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/.test(stripeKey) ||
+      !/^whsec_[A-Za-z0-9]+$/.test(webhookSecret ?? ""))
+  )
+    throw new ConfigurationError(
+      "Invalid Stripe server configuration. See .env.example.",
+    );
   const { RESEND_API_KEY: key, EMAIL_FROM_ADDRESS: from } = result.data;
   if ((key || from) && !(key && from))
     throw new ConfigurationError(
@@ -171,6 +188,9 @@ export function readConfiguration(
     ...databaseConnection(result.data.DATABASE_URL, result.data.DATABASE_SSL),
     origin: origin.origin,
     ...(key && from ? { email: { key, from } } : {}),
+    ...(stripeKey && webhookSecret
+      ? { stripe: { key: stripeKey, webhookSecret } }
+      : {}),
     storage: storageConfiguration(
       environment,
       result.data.STORAGE_DRIVER,

@@ -2,7 +2,7 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
-Development is ongoing. Operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices and full manual settlement are implemented. Direct Stripe payment and the remaining product features are still in development; integrated verification continues.
+Development is ongoing. The current runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement and direct Stripe Checkout payments. Remaining product features and integrated verification are in progress.
 
 ## Run with Docker Compose
 
@@ -57,6 +57,28 @@ For private S3-compatible storage, set `STORAGE_DRIVER=s3` and supply `STORAGE_S
 Attachments stream through currently authorized application endpoints. They have no public file URL or payment gate. `MAX_UPLOAD_SIZE_MB` accepts 1–100 MB per file, with at most five files per message. Failed submissions preserve drafts for retry. Keep original storage available when moving providers: changing configuration does not move existing files.
 
 Email is optional. Supply both `RESEND_API_KEY` and `EMAIL_FROM_ADDRESS`, or omit both. Use a verified sender domain and disable click tracking for authentication links. The setup verification button submits a test email to Resend's fixed test address and uses provider quota; provider acceptance and actual inbox delivery are distinct. Manual client links remain available if email is unavailable.
+
+## Direct Stripe payments
+
+Clients choose **Pay invoice** on their sent or overdue invoice and pay on Stripe's hosted Checkout page. Checkout collects the frozen invoice total and currency, including an agreed total override. Yinsen records payment and releases linked files only after a verified paid server callback; returning from Checkout grants nothing. This integration accepts cards. Online amount/currency limits apply; manual payment instructions remain available when Checkout cannot collect an invoice.
+
+Set both `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, or omit both. A publishable key is not used. Setup verifies access to the Stripe account; actual payment and webhook delivery require a separate end-to-end check. Restart the application after changing these environment values.
+
+For sandbox verification, authenticate Stripe CLI to the same sandbox as the application's test secret. Run the listener on the application host:
+
+```sh
+stripe listen --latest --events-from @self \
+  --forward-to http://localhost:3000/api/webhooks/stripe \
+  --events checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed
+```
+
+Save that listener's signing secret as `STRIPE_WEBHOOK_SECRET` in the private `.env` and restart the application. Keep the listener running during testing. Use a real sandbox Checkout payment and confirm the invoice, Stripe payment record and client download; fabricated events and browser returns do not establish payment. The app remains on loopback during this local workflow.
+
+For a live installation, use the live account secret and register `https://<your-origin>/api/webhooks/stripe` in Stripe with the same four event types. Use that endpoint's own signing secret. The implementation pins Stripe SDK 23.0.0 and API `2026-09-30.endive`; keep the webhook event version aligned. The local command's `--latest` currently matches this version. Create real invoices in Yinsen after live configuration; sandbox objects do not become live transactions. Live payments enter your Stripe balance and pay out to your linked bank account according to your [Stripe payout settings](https://docs.stripe.com/payouts).
+
+Repeated Pay requests recover the existing attempt. If its outcome remains unknown, resolve it before arranging another payment. After 23 hours an unknown creation is blocked from automatic recreation because Stripe's idempotency retention is finite. The operator can find the session using its `attempt_id` metadata in Stripe and choose **Recover matching session**; this verifies the saved invoice correlation.
+
+Cancellation and manual settlement try to expire open sessions; an unconfirmed expiration remains visible to the operator. A distinct payment arriving after payment, settlement or cancellation appears as a payment exception, including for a soft-deleted invoice in the invoice list. Consult its provider reference in Stripe and use **Record external resolution** to save the outcome. Yinsen does not automatically refund, revive the invoice, count revenue twice or repeat file release.
 
 ## Source development
 

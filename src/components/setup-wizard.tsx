@@ -154,6 +154,7 @@ function Integrations({
   manual,
   chooseManual,
   storage,
+  payments,
 }: {
   status: string;
   verify: () => void;
@@ -162,6 +163,7 @@ function Integrations({
   manual: boolean;
   chooseManual: (checked: boolean) => void;
   storage: string;
+  payments: string;
 }): ReactElement {
   return (
     <section>
@@ -186,7 +188,7 @@ function Integrations({
         </li>
         <li>
           <strong>Payments</strong>
-          <span>Skipped · no service configured</span>
+          <span>{payments || "Not checked"}</span>
         </li>
         <li>
           <strong>File storage</strong>
@@ -222,6 +224,7 @@ function Integrations({
 async function verifyInstallation(): Promise<{
   email: Exclude<EmailStatus, "unchecked">;
   storage: "local" | "s3";
+  payments: "verified" | "skipped" | "failed";
 }> {
   const response = await fetch("/api/setup/verify", {
     method: "POST",
@@ -235,6 +238,7 @@ async function verifyInstallation(): Promise<{
           database: z.literal("configured"),
           email: z.enum(["accepted", "skipped", "failed"]),
           storage: z.enum(["local", "s3"]),
+          payments: z.enum(["verified", "skipped", "failed"]),
         })
         .nullable(),
     })
@@ -258,6 +262,7 @@ function useWizard(): {
   email: EmailStatus;
   storage: string;
   manual: boolean;
+  payments: string;
   chooseManual: (checked: boolean) => void;
   submit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   back: () => void;
@@ -275,6 +280,7 @@ function useWizard(): {
   const [status, setStatus] = useState("");
   const [email, setEmail] = useState<EmailStatus>("unchecked");
   const [storage, setStorage] = useState("");
+  const [payments, setPayments] = useState("");
   const [manual, chooseManual] = useState(false);
   async function verify(): Promise<void> {
     setPending(true);
@@ -286,6 +292,13 @@ function useWizard(): {
       const outcome = await verifyInstallation();
       setStatus("Configured · connection verified");
       setEmail(outcome.email);
+      setPayments(
+        outcome.payments === "verified"
+          ? "Stripe account verified · webhook delivery requires a payment"
+          : outcome.payments === "failed"
+            ? "Stripe verification failed · check server configuration"
+            : "Skipped · manual payment instructions",
+      );
       setStorage(
         outcome.storage === "local"
           ? "Local · directory checked"
@@ -357,6 +370,7 @@ function useWizard(): {
     status,
     email,
     storage,
+    payments,
     manual,
     chooseManual,
     submit,
@@ -422,6 +436,7 @@ export function SetupWizard(): ReactElement {
             <Integrations
               status={wizard.status}
               storage={wizard.storage}
+              payments={wizard.payments}
               email={wizard.email}
               manual={wizard.manual}
               chooseManual={wizard.chooseManual}

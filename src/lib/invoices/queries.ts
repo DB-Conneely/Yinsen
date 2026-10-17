@@ -67,16 +67,18 @@ export async function getInvoice(
   id: string,
   actor: ProjectActor,
   sql: postgres.Sql | postgres.TransactionSql = getSql(),
+  historical = false,
 ): Promise<InvoiceDetail> {
   resourceId.parse(id);
+  if (historical) operatorOnly(actor);
   if (sql === getSql())
     return getSql().begin(async (transaction) => {
       await transaction`select i.id from invoices i where i.id=${id} and i.deleted_at is null and (${actor.role === "operator"} or (i.client_id=${actor.id} and i.sent_at is not null and exists(select 1 from clients c where c.id=i.client_id and c.deleted_at is null))) for share of i`;
-      return getInvoice(id, actor, transaction);
+      return getInvoice(id, actor, transaction, historical);
     });
   const rows = await sql<
     Invoice[]
-  >`select ${sql.unsafe(fields)} from invoices i where i.id=${id} and i.deleted_at is null and (${actor.role === "operator"} or (i.client_id=${actor.id} and i.sent_at is not null and exists(select 1 from clients c where c.id=i.client_id and c.deleted_at is null)))`;
+  >`select ${sql.unsafe(fields)} from invoices i where i.id=${id} and (${historical} or i.deleted_at is null) and (${actor.role === "operator"} or (i.client_id=${actor.id} and i.sent_at is not null and exists(select 1 from clients c where c.id=i.client_id and c.deleted_at is null)))`;
   const invoice = rows[0];
   if (!invoice) throw new AppError(404, "NOT_FOUND", "Invoice not found.");
   const lineItems = await sql<

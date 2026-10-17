@@ -13,6 +13,7 @@ import { resourceId, reviewedVersion } from "../projects/validation";
 import { publishProject, publishClientAccess } from "../events/hub";
 import { writeDeliverableRelease } from "../deliverables/service";
 import { sendInvoiceEmail } from "../email/resend";
+import { expireInvoiceSessions } from "../stripe/provider";
 import { getInvoice, type InvoiceDetail } from "./queries";
 import {
   invoiceFields,
@@ -24,19 +25,18 @@ import {
 type Fields = z.infer<typeof invoiceFields>;
 
 // All invoice writers use this boundary. Project locks precede the invoice row lock.
-export async function withInvoiceLock(
+export async function withInvoiceLock<T = InvoiceDetail>(
   id: string,
   actor: ProjectActor,
-  action: (
-    sql: postgres.TransactionSql,
-    invoice: InvoiceDetail,
-  ) => Promise<InvoiceDetail>,
+  action: (sql: postgres.TransactionSql, invoice: InvoiceDetail) => Promise<T>,
   nextProjectId?: string | null,
-): Promise<InvoiceDetail> {
+  historical = false,
+): Promise<T> {
   resourceId.parse(id);
-  return getSql().begin(async (sql) => {
+  if (historical) operatorOnly(actor);
+  const result = await getSql().begin(async (sql) => {
     const visible =
-      await sql`select i.id from invoices i where i.id=${id} and i.deleted_at is null and (${actor.role === "operator"} or (i.client_id=${actor.id} and i.sent_at is not null and exists(select 1 from clients c where c.id=i.client_id and c.deleted_at is null)))`;
+      await sql`select i.id from invoices i where i.id=${id} and (${historical} or i.deleted_at is null) and (${actor.role === "operator"} or (i.client_id=${actor.id} and i.sent_at is not null and exists(select 1 from clients c where c.id=i.client_id and c.deleted_at is null)))`;
     if (!visible.length)
       throw new AppError(404, "NOT_FOUND", "Invoice not found.");
     await sql`select pg_advisory_xact_lock(hashtextextended(${id},32))`;
@@ -53,8 +53,11 @@ export async function withInvoiceLock(
     for (const projectId of projectIds)
       await sql`select id from projects where id=${projectId} for update`;
     await sql`select id from invoices where id=${id} for update`;
-    return action(sql, await getInvoice(id, actor, sql));
+    return {
+      value: await action(sql, await getInvoice(id, actor, sql, historical)),
+    };
   });
+  return result.value;
 }
 
 export async function publishInvoice(invoice: InvoiceDetail): Promise<void> {
@@ -361,8 +364,8 @@ export async function settleInvoice(
 ): Promise<InvoiceDetail> {
   operatorOnly(actor);
   const receipt = settlementInput.parse(input);
-  const invoice = await withInvoiceLock(id, actor, (sql, current) =>
-    writeMoneyReceived(
+  const invoice = await withInvoiceLock(id, actor, async (sql, current) => {
+    const result = await writeMoneyReceived(
       sql,
       current,
       {
@@ -373,8 +376,10 @@ export async function settleInvoice(
         paymentMethod: receipt.paymentMethod,
       },
       actor,
-    ),
-  );
+    );
+    await expireInvoiceSessions(sql, id);
+    return result;
+  });
   await publishInvoice(invoice);
   return invoice;
 }
@@ -396,6 +401,7 @@ export async function cancelInvoice(
       await sql`update invoices set status='cancelled',updated_at=clock_timestamp() where id=${id}`;
       await activity(sql, current, actor, "invoice.cancelled");
     }
+    await expireInvoiceSessions(sql, id);
     if (remove) await sql`update invoices set deleted_at=now() where id=${id}`;
     return current;
   });

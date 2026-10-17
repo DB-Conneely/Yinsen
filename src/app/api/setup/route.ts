@@ -13,7 +13,9 @@ export async function GET(): Promise<Response> {
     return {
       database: "configured",
       email: readConfiguration().email ? "configured_unverified" : "skipped",
-      payments: "skipped",
+      payments: readConfiguration().stripe
+        ? "configured_unverified"
+        : "skipped",
       storage: "skipped",
     };
   });

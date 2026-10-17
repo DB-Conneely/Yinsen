@@ -15,6 +15,21 @@ const valid = {
 };
 
 describe("configuration trust boundary", () => {
+  it("requires paired private Stripe configuration", () => {
+    expect(() =>
+      readConfiguration({ ...valid, STRIPE_SECRET_KEY: "sk_test_fixture" }),
+    ).toThrow(ConfigurationError);
+    expect(() =>
+      readConfiguration({ ...valid, STRIPE_WEBHOOK_SECRET: "whsec_fixture" }),
+    ).toThrow(ConfigurationError);
+    expect(
+      readConfiguration({
+        ...valid,
+        STRIPE_SECRET_KEY: "rk_test_fixture",
+        STRIPE_WEBHOOK_SECRET: "whsec_fixture",
+      }).stripe?.key,
+    ).toBe("rk_test_fixture");
+  });
   it("accepts local configuration and normalizes the origin", () => {
     expect(readConfiguration(valid)).toEqual({
       databaseUrl: valid.DATABASE_URL,

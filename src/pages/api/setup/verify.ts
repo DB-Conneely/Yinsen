@@ -8,6 +8,7 @@ import { verifyEmail } from "../../../lib/email/resend";
 import { consumeLoginAttempt } from "../../../lib/auth/rate-limit";
 import { AppError } from "../../../lib/errors";
 import { verifyStorage } from "../../../lib/storage/adapter";
+import { verifyStripe } from "../../../lib/stripe/provider";
 
 export const config = { api: { bodyParser: false } };
 export default async function verifySetup(
@@ -40,7 +41,7 @@ export default async function verifySetup(
     return {
       database: "configured",
       email: await verifyEmail(),
-      payments: "skipped",
+      payments: await verifyStripe(),
       storage: await verifyStorage(),
     };
   });

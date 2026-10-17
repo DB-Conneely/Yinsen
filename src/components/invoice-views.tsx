@@ -16,6 +16,14 @@ import { formatBudget } from "../lib/money";
 import { ProjectLive } from "./project-live";
 import { InvoiceActions, InvoiceDefaults } from "./invoice-actions";
 import { InvoiceForm } from "./invoice-form";
+import {
+  InvoicePay,
+  CheckoutRecovery,
+  PaymentExceptionAction,
+} from "./invoice-payment";
+import { paymentExceptions, checkoutProblems } from "../lib/stripe/queries";
+import { invoiceAttempts } from "../lib/stripe/checkout";
+import { getSql } from "../lib/db/client";
 
 async function detail(id: string, actor: ProjectActor): Promise<InvoiceDetail> {
   try {
@@ -39,6 +47,10 @@ export async function InvoiceList({
     parsed.success ? { status: parsed.data } : {},
   );
   const branding = actor.role === "operator" ? await getBranding() : null;
+  const exceptions =
+    actor.role === "operator" ? await paymentExceptions(actor) : [];
+  const problems =
+    actor.role === "operator" ? await checkoutProblems(actor) : [];
   const root =
     actor.role === "operator" ? "/dashboard/invoices" : "/portal/invoices";
   return (
@@ -118,6 +130,33 @@ export async function InvoiceList({
           next={branding.invoiceNextNumber}
           instructions={branding.paymentInstructions}
         />
+      )}
+      {problems.length > 0 && (
+        <section aria-label="Checkout needs review">
+          <h2>Checkout needs review</h2>
+          {problems.map((attempt) => (
+            <article className="card invoice-payment-record" key={attempt.id}>
+              <h3>{attempt.number} · Checkout needs review</h3>
+              <p role="alert">
+                {attempt.problem ??
+                  "Session expiration could not be confirmed. Consult Stripe before arranging another payment."}
+              </p>
+              <CheckoutRecovery
+                invoiceId={attempt.invoiceId}
+                attemptId={attempt.id}
+                initialSessionId={attempt.sessionId}
+              />
+            </article>
+          ))}
+        </section>
+      )}
+      {exceptions.length > 0 && (
+        <section aria-label="Payment exceptions">
+          <h2>Payment exceptions</h2>
+          {exceptions.map((payment) => (
+            <PaymentExceptionAction key={payment.paymentId} payment={payment} />
+          ))}
+        </section>
       )}
     </ProjectLive>
   );
@@ -254,8 +293,40 @@ export async function InvoiceWorkspace({
               : "Invoice terms and confirmed payment record."}
           </p>
         </div>
+        {actor.role === "client" &&
+          readConfiguration().stripe &&
+          ["sent", "overdue"].includes(invoice.status) && (
+            <InvoicePay
+              id={invoice.id}
+              amount={formatBudget(invoice.amount, invoice.currency)}
+            />
+          )}
       </div>
       <InvoicePreview invoice={invoice} />
+      {actor.role === "operator" &&
+        (await invoiceAttempts(getSql(), invoice.id)).map((attempt) => (
+          <section className="card invoice-payment-record" key={attempt.id}>
+            <h2>Stripe Checkout · {attempt.state}</h2>
+            <p>
+              Attempt: <code>{attempt.id}</code>
+            </p>
+            {attempt.sessionId && (
+              <p>
+                Session: <code>{attempt.sessionId}</code>
+              </p>
+            )}
+            {attempt.problem && <p role="alert">{attempt.problem}</p>}
+            {!attempt.sessionId && (
+              <CheckoutRecovery invoiceId={invoice.id} attemptId={attempt.id} />
+            )}
+          </section>
+        ))}
+      {actor.role === "operator" &&
+        (await paymentExceptions(actor))
+          .filter((payment) => payment.invoiceId === invoice.id)
+          .map((payment) => (
+            <PaymentExceptionAction key={payment.paymentId} payment={payment} />
+          ))}
       {actor.role === "operator" && (
         <InvoiceActions
           invoice={invoice}
