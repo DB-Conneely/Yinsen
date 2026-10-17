@@ -207,8 +207,8 @@ export function ClientActions({
   const cancel = useRef<HTMLButtonElement>(null);
   const archive = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (confirm) cancel.current?.focus();
-  }, [confirm]);
+    if (confirm && !pending) cancel.current?.focus();
+  }, [confirm, pending]);
   function cancelArchive(): void {
     setConfirm(false);
     archive.current?.focus();
@@ -276,7 +276,7 @@ export function ClientActions({
           role="group"
           aria-label="Archive client confirmation"
           onKeyDown={(event) => {
-            if (event.key === "Escape") cancelArchive();
+            if (event.key === "Escape" && !pending) cancelArchive();
           }}
         >
           <p>
@@ -291,7 +291,12 @@ export function ClientActions({
           >
             Confirm archive
           </button>{" "}
-          <button ref={cancel} className="secondary" onClick={cancelArchive}>
+          <button
+            ref={cancel}
+            disabled={pending}
+            className="secondary"
+            onClick={cancelArchive}
+          >
             Cancel
           </button>
         </div>
