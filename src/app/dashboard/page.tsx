@@ -1,6 +1,9 @@
 import type { ReactElement } from "react";
 import { operatorForPage } from "../../lib/auth/page";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Operator dashboard" };
 
 export default async function Dashboard(): Promise<ReactElement> {
   const identity = await operatorForPage();

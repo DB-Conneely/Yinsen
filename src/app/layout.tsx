@@ -1,6 +1,11 @@
 import type { ReactNode, ReactElement } from "react";
 import "./globals.css";
 import { themeBootstrap } from "../lib/theme";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: { default: "Client portal", template: "%s | Client portal" },
+};
 
 export default function RootLayout({
   children,

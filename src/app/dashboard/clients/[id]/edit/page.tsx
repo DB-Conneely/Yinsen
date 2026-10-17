@@ -4,6 +4,10 @@ import { operatorForPage } from "../../../../../lib/auth/page";
 import { getClient, clientId } from "../../../../../lib/clients/service";
 import { ClientForm } from "../../../../../components/client-forms";
 import { AppError } from "../../../../../lib/errors";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Edit client" };
+
 export default async function EditClient({
   params,
 }: {

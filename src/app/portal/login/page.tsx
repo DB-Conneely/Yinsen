@@ -4,6 +4,9 @@ import { getBranding } from "../../../lib/settings";
 import { BrandFrame } from "../../../components/brand";
 import { readConfiguration } from "../../../lib/config";
 import { ClientLoginForm } from "../../../components/client-auth";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Client login" };
 
 export const dynamic = "force-dynamic";
 

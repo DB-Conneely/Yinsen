@@ -1,6 +1,9 @@
 import nextEnv from "@next/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import postgres from "postgres";
+import { NextRequest } from "next/server";
+import { proxy } from "../src/proxy";
 import { getSql } from "../src/lib/db/client";
 import { hashPassword, comparePassword } from "../src/lib/auth/password";
 import {
@@ -226,6 +229,33 @@ describe("real persisted operator access", () => {
     ).toBe(200);
     expect((await me(authenticated)).status).toBe(401);
     expect((await logout(request("/api/auth/logout", {}))).status).toBe(401);
+  });
+  it("preserves page authorization and withholds renewal on a real proxy database failure", async () => {
+    const result = await loginOperator({
+      email: account.email,
+      password: account.password,
+    });
+    const token = result.session.token;
+    const input = new NextRequest(`${origin}/dashboard`, {
+      headers: { cookie: `pylon_session=${token}` },
+    });
+    const admin = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
+      max: 1,
+    });
+    try {
+      expect((await proxy(input)).headers.get("set-cookie")).toContain(token);
+      await admin`revoke update on operator_sessions from yinsen_runtime`;
+      const response = await proxy(input);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("set-cookie")).toBeNull();
+      await expect(requireOperatorToken(token)).rejects.toBeDefined();
+      expect((await me(request("/api/auth/me", {}, token))).status).toBe(503);
+    } finally {
+      await admin`grant update on operator_sessions to yinsen_runtime`;
+      await admin.end();
+      await destroyOperatorSession(token);
+    }
   });
   it("uses persisted branding on landing and client shell without exposing private settings", async () => {
     const branding = await getBranding();

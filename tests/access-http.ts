@@ -7,6 +7,7 @@ const origin = process.env.TEST_ORIGIN ?? process.env.APP_ORIGIN;
 assert.ok(origin, "Set TEST_ORIGIN for the deliberate synthetic installation.");
 assert.equal(process.env.TEST_ISOLATED_DATABASE, "1");
 const sql = postgres(process.env.DATABASE_URL ?? "", { max: 1 });
+const admin = postgres(process.env.MIGRATION_DATABASE_URL ?? "", { max: 1 });
 const input = {
   email: "operator@example.test",
   password: "remote-proof-password-12!",
@@ -79,6 +80,62 @@ try {
   assert.match(await dashboard.text(), /Welcome.*Remote Operator/);
   assert.match(dashboard.headers.get("set-cookie") ?? "", /Max-Age=7776000/);
   assert.match(dashboard.headers.get("cache-control") ?? "", /no-store/);
+  for (const [path, title] of [
+    ["/", "Welcome"],
+    ["/login", "Operator login"],
+    ["/operator-guide", "Installation configuration"],
+    ["/dashboard", "Operator dashboard"],
+    ["/dashboard/clients", "Clients"],
+    ["/dashboard/clients/new", "New client"],
+    ["/portal/login", "Client login"],
+    ["/portal/verify", "Confirm client login"],
+  ]) {
+    const response = await fetch(`${origin}${path}`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(response.status, 200);
+    assert.ok(
+      (await response.text()).includes(
+        `<title>${title} | Client portal</title>`,
+      ),
+      `Missing descriptive title on ${path}`,
+    );
+  }
+  try {
+    await admin`revoke update on operator_sessions from yinsen_runtime`;
+    const failed = await fetch(`${origin}/dashboard`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(failed.status, 500);
+    assert.equal(failed.headers.get("set-cookie"), null);
+    for (const header of [
+      "content-security-policy",
+      "x-frame-options",
+      "x-content-type-options",
+      "referrer-policy",
+      "permissions-policy",
+      "strict-transport-security",
+    ])
+      assert.ok(
+        failed.headers.get(header),
+        `Missing ${header} on safe failure`,
+      );
+    const body = await failed.text();
+    assert.match(body, /Reload/);
+    assert.doesNotMatch(body, /Welcome, Remote Operator/);
+    assert.equal(
+      (await fetch(`${origin}/api/auth/me`, { headers: { Cookie: cookie } }))
+        .status,
+      503,
+    );
+  } finally {
+    await admin`grant update on operator_sessions to yinsen_runtime`;
+  }
+  const recovered = await fetch(`${origin}/dashboard`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(recovered.status, 200);
+  assert.match(recovered.headers.get("set-cookie") ?? "", /Max-Age=7776000/);
   assert.equal(
     (
       await write("/api/auth/logout", {}, cookie, {
@@ -150,4 +207,5 @@ try {
   );
 } finally {
   await sql.end();
+  await admin.end();
 }

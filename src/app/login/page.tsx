@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { getBranding } from "../../lib/settings";
 import { BrandFrame } from "../../components/brand";
 import { LoginForm } from "../../components/auth-forms";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Operator login" };
 
 export const dynamic = "force-dynamic";
 

@@ -13,6 +13,9 @@ import {
   RevokeSession,
 } from "../../../../components/client-forms";
 import { AppError } from "../../../../lib/errors";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Client details" };
 
 const activityLabels: Record<string, string> = {
   "client.created": "Client created",

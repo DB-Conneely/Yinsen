@@ -19,6 +19,13 @@ const defaults = {
   defaultCurrency: "GBP",
   welcomeText: "Welcome to your client portal.",
 };
+const emailLabels = {
+  unchecked: "Not checked",
+  accepted: "Configured · provider accepted test (inbox delivery unverified)",
+  skipped: "Skipped · manual login links available",
+  failed: "Failed · check Resend key and sender",
+};
+type EmailStatus = keyof typeof emailLabels;
 type WizardState = {
   name: string;
   email: string;
@@ -144,11 +151,15 @@ function Integrations({
   verify,
   pending,
   email,
+  manual,
+  chooseManual,
 }: {
   status: string;
   verify: () => void;
   pending: boolean;
-  email: string;
+  email: EmailStatus;
+  manual: boolean;
+  chooseManual: (checked: boolean) => void;
 }): ReactElement {
   return (
     <section>
@@ -169,7 +180,7 @@ function Integrations({
         </li>
         <li>
           <strong>Email</strong>
-          <span>{email || "Not checked"}</span>
+          <span>{emailLabels[email]}</span>
         </li>
         <li>
           <strong>Payments</strong>
@@ -188,12 +199,49 @@ function Integrations({
       >
         {pending ? "Checking…" : "Verify installation"}
       </button>
+      {email === "failed" && (
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={manual}
+            onChange={(event) => chooseManual(event.target.checked)}
+          />
+          Continue with manual login links
+        </label>
+      )}
       <p>
         Optional services can be configured when needed. See{" "}
         <a href="/operator-guide">operator instructions</a>.
       </p>
     </section>
   );
+}
+
+async function verifyInstallation(): Promise<
+  Exclude<EmailStatus, "unchecked">
+> {
+  const response = await fetch("/api/setup/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const result = z
+    .object({
+      data: z
+        .object({
+          database: z.literal("configured"),
+          email: z.enum(["accepted", "skipped", "failed"]),
+        })
+        .nullable(),
+    })
+    .parse(await response.json());
+  if (!response.ok || !result.data)
+    throw new AppError(
+      503,
+      "VERIFY_FAILED",
+      "Verification failed. Check the database and operator instructions.",
+    );
+  return result.data.email;
 }
 
 function useWizard(): {
@@ -203,7 +251,9 @@ function useWizard(): {
   error: string;
   pending: boolean;
   status: string;
-  email: string;
+  email: EmailStatus;
+  manual: boolean;
+  chooseManual: (checked: boolean) => void;
   submit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   back: () => void;
   verify: () => Promise<void>;
@@ -218,46 +268,22 @@ function useWizard(): {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState<EmailStatus>("unchecked");
+  const [manual, chooseManual] = useState(false);
   async function verify(): Promise<void> {
     setPending(true);
     setError("");
+    setStatus("");
+    setEmail("unchecked");
+    chooseManual(false);
     try {
-      const response = await fetch("/api/setup/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const result = z
-        .object({
-          data: z
-            .object({
-              database: z.literal("configured"),
-              email: z.enum(["accepted", "skipped", "failed"]),
-            })
-            .nullable(),
-        })
-        .parse(await response.json());
-      if (!response.ok || !result.data)
-        throw new AppError(
-          503,
-          "VERIFY_FAILED",
-          "Verification failed. Check the database and operator instructions.",
-        );
-      setEmail(
-        result.data.email === "accepted"
-          ? "Configured · provider accepted test (inbox delivery unverified)"
-          : result.data.email === "skipped"
-            ? "Skipped · manual login links available"
-            : "Failed · check Resend key and sender",
-      );
-      if (result.data.email === "failed")
-        throw new AppError(
-          503,
-          "VERIFY_FAILED",
-          "Email verification failed. Check Resend configuration in the operator instructions.",
-        );
+      const outcome = await verifyInstallation();
       setStatus("Configured · connection verified");
+      setEmail(outcome);
+      if (outcome === "failed")
+        setError(
+          "Email verification failed. Retry after checking Resend configuration, or continue with manual login links.",
+        );
     } catch (failure: unknown) {
       setStatus("Failed");
       setError(
@@ -285,6 +311,10 @@ function useWizard(): {
     }
     if (step === 2 && !status.startsWith("Configured")) {
       setError("Verify the installation before continuing.");
+      return;
+    }
+    if (step === 2 && email === "failed" && !manual) {
+      setError("Retry email verification or choose manual login links.");
       return;
     }
     if (step < 3) {
@@ -315,6 +345,8 @@ function useWizard(): {
     pending,
     status,
     email,
+    manual,
+    chooseManual,
     submit,
     back: () => {
       setStep(step - 1);
@@ -357,7 +389,8 @@ export function SetupWizard(): ReactElement {
           <h2>{wizard.value.brandName} is ready</h2>
           <p>
             Your operator account and {wizard.value.defaultCurrency} defaults
-            are saved. Database verified. Email: {wizard.email}.
+            are saved. Database verified. Email: {emailLabels[wizard.email]}.
+            {wizard.manual && " Manual login links selected."}
           </p>
           <a href="/dashboard" className="button">
             Go to dashboard
@@ -377,6 +410,8 @@ export function SetupWizard(): ReactElement {
             <Integrations
               status={wizard.status}
               email={wizard.email}
+              manual={wizard.manual}
+              chooseManual={wizard.chooseManual}
               pending={wizard.pending}
               verify={() => {
                 void wizard.verify();

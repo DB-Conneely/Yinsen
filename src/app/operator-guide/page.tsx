@@ -1,6 +1,9 @@
 import type { ReactElement } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Installation configuration" };
 
 export default function OperatorGuide(): ReactElement {
   return (

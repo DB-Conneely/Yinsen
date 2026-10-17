@@ -1,5 +1,9 @@
 import type { ReactElement } from "react";
 import { clientForPage } from "../../../lib/auth/client-page";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Your account" };
+
 export default async function PortalPage(): Promise<ReactElement> {
   const identity = await clientForPage();
   return (

@@ -2,6 +2,9 @@ import type { ReactElement } from "react";
 import Link from "next/link";
 import { operatorForPage } from "../../../lib/auth/page";
 import { listClients } from "../../../lib/clients/service";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Clients" };
 
 export default async function ClientsPage({
   searchParams,

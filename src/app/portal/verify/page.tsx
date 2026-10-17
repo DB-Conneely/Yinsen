@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { getBranding } from "../../../lib/settings";
 import { BrandFrame } from "../../../components/brand";
 import { VerifyClientLink } from "../../../components/client-auth";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Confirm client login" };
+
 export const dynamic = "force-dynamic";
 export default async function VerifyPage(): Promise<ReactElement> {
   const branding = await getBranding();
