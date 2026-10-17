@@ -1,4 +1,16 @@
-# Current handover — paused inside Task 1.1
+# Current handover — Phase 1 resumed on Abyss
+
+17 October 2026. Neels explicitly resumed all of Phase 1 on the SSH server, superseding the historical pause and stop-after-1.1 instructions below. **Phase 1 is UNVERIFIED.** Complete Task 1.1, then fresh sequential implementors deliver 1.2 and 1.3; three parallel task auditors, three coordinating report-specific patchers and fresh write-capable QA follow. QA alone accepts. No push, deployment or Phase 2 implementation is authorised.
+
+- Current orchestrator: chat `phase1 yinsen`, `01a14734-16de-78d2-93d8-e3f4052dd771`. Every phase worker must explicitly verify `abyssbox` and `/home/neels/development/yinsen`. No laptop execution or separate worktree.
+- Resume inspection: local `main` at `25edfb0bc6f8cb7049c756ff7433245b726156ec`, empty index, no remote/tag/stash. All interrupted modified/untracked work remains. The additional `next-env.d.ts` change references generated development types. The current 38-file source fingerprint is `e3ff445d85e95391930258594c84bac074e2eacfea95bf3c5823458567463e99`, using the definition in [Phase 1](as-built/phase-01.md). Earlier Mac evidence remains historical.
+- Task 1.1 write ownership: fresh implementor `/root/implement_11_remote`; owns foundation source, packaging, tests, operator/as-built records and context refresh. Orchestrator owns Git and this handover. Later task ownership transfers after each handover.
+- Actual database: healthy `yinsen_abyss-postgres-1`, pinned PostgreSQL 16.13 Alpine, restored volume `yinsen_abyss_postgres_data`, loopback `127.0.0.1:55432`. Its Compose configuration belongs to the private migration fixture; inspect it before changing services. Preserve all data. Root private `.env` is mode 0600 with `COMPOSE_PROJECT_NAME=yinsen_abyss`.
+- Existing development preview was verified at `127.0.0.1:3000`, PID/process group `1529776`, checkout as above; ownership record `/home/neels/.local/state/abyss-development/migrations/yinsen-20261016T114651Z/preview-process.json`. Task 1.1 now owns deliberate service switching after rechecking process identity. Do not share `.next` between development and production builds.
+- Remote Node 22.21.1/npm 10.9.4, Docker, native Cortex/Graphify and registered Playwright/Chrome are available. Remote browser rendered the installed foundation and HTTP health returned 200. These access checks do not verify the interrupted patch. Generated maps remain stale pending the assigned refresh. Run **one heavy command at a time across all agents**; preserve unrelated server workloads.
+- Real Resend delivery and the emailed login-link journey remain required before final QA acceptance. Provider configuration and a permitted recipient are pending; continue independent work. After QA VERIFIED, final records/commits and source reconciliation, resolve the actual remote `phase2 yinsen` chat with `list_threads`, confirm its repository/host, send the authorised handoff and relinquish Phase 1 ownership.
+
+## Historical pause record — preserved
 
 16 October 2026. **PAUSED at Neels's request. Task 1.1 is unfinished; Phase 1 is UNVERIFIED. Do not start Task 1.2.** No phase audits, patch stage or QA have begun. No Phase 2 message has been sent.
 
