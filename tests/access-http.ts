@@ -90,7 +90,7 @@ try {
     ["/portal/login", "Client login"],
     ["/portal/verify", "Confirm client login"],
   ]) {
-    const response = await fetch(`${origin}${path}`, {
+    const response: Response = await fetch(`${origin}${path}`, {
       headers: { Cookie: cookie },
     });
     assert.equal(response.status, 200);

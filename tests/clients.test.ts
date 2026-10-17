@@ -616,9 +616,11 @@ describe("native Resend boundary with actual owned caller/database", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((_url: string, options: RequestInit) => {
+        if (typeof options.body !== "string")
+          throw new TypeError("Expected native JSON body");
         const body = z
           .object({ text: z.string() })
-          .parse(JSON.parse(String(options.body)) as unknown);
+          .parse(JSON.parse(options.body) as unknown);
         token = body.text.match(/\/portal\/verify#([a-f0-9]{64})/)?.[1];
         return Promise.resolve(Response.json({ id: randomUUID() }));
       }),
@@ -649,10 +651,12 @@ describe("native Resend boundary with actual owned caller/database", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((_url: string, options: RequestInit) => {
+        if (typeof options.body !== "string")
+          throw new TypeError("Expected native JSON body");
         html.push(
           z
             .object({ html: z.string() })
-            .parse(JSON.parse(String(options.body)) as unknown).html,
+            .parse(JSON.parse(options.body) as unknown).html,
         );
         return Promise.resolve(Response.json({ id: randomUUID() }));
       }),
