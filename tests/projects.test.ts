@@ -172,6 +172,14 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
     expect((await listProjects(outsider)).map((item) => item.id)).not.toContain(
       project.id,
     );
+    expect(
+      (await listProjects(member, { status: "active" })).map((item) => item.id),
+    ).not.toContain(project.id);
+    expect(
+      (await listProjects(operator, { client_id: primary.id })).map(
+        (item) => item.id,
+      ),
+    ).toContain(project.id);
     await projectAccess(project.id, member);
     await expect(getProject(project.id, outsider)).rejects.toMatchObject({
       statusCode: 404,

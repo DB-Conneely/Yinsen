@@ -20,6 +20,14 @@ export function DashboardNavigation(): ReactElement {
       >
         Clients
       </Link>
+      <Link
+        href="/dashboard/projects"
+        aria-current={
+          pathname?.startsWith("/dashboard/projects") ? "page" : undefined
+        }
+      >
+        Projects
+      </Link>
       <Link href="/" className="public-nav">
         <span aria-hidden="true">↗</span>Public portal
       </Link>

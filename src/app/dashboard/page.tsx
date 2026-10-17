@@ -13,6 +13,13 @@ export default async function Dashboard(): Promise<ReactElement> {
       <h1>Welcome, {identity.name}</h1>
       <p>Your workspace for client relationships and secure portal access.</p>
       <div className="overview-links">
+        <Link href="/dashboard/projects" className="card">
+          <p className="eyebrow">Shared work</p>
+          <h2>
+            Open your projects <span aria-hidden="true">↗</span>
+          </h2>
+          <p>Agree scope, organise milestones and keep work moving.</p>
+        </Link>
         <Link href="/dashboard/clients" className="card">
           <p className="eyebrow">Client directory</p>
           <h2>

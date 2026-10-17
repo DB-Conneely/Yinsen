@@ -50,7 +50,7 @@ export async function projectStream(
           (actor.role === "operator" || change.clientIds.includes(actor.id))
         )
           schedule(true);
-      });
+      }, close);
       const timer = setInterval(() => schedule(false), 5000);
       cleanup = (): void => {
         closed = true;

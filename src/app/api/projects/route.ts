@@ -6,7 +6,10 @@ import { saveProject } from "../../../lib/projects/service";
 
 export async function GET(request: Request): Promise<Response> {
   return apiResponse(async () =>
-    listProjects(await projectActor(requestToken(request))),
+    listProjects(
+      await projectActor(requestToken(request)),
+      Object.fromEntries(new URL(request.url).searchParams),
+    ),
   );
 }
 export async function POST(request: Request): Promise<Response> {

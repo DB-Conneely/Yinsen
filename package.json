@@ -18,6 +18,7 @@
     "test:http": "tsx --env-file=.env tests/http.ts",
     "test:access": "tsx tests/access-http.ts",
     "test:clients": "tsx tests/clients-http.ts",
+    "test:projects": "tsx tests/projects-http.ts",
     "test:setup-race": "tsx tests/setup-race.ts",
     "check:markers": "node scripts/check-markers.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run check:markers && npm run build",
