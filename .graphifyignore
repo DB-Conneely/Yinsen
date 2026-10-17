@@ -12,7 +12,7 @@ playwright-report/
 coverage/
 data/
 uploads/
-storage/
+/storage/
 volumes/
 backups/
 recovery/

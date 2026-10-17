@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 import { databaseConnection, readConfiguration } from "../src/lib/config";
 import {
   AppError,
@@ -19,6 +20,11 @@ describe("configuration trust boundary", () => {
       databaseUrl: valid.DATABASE_URL,
       ssl: false,
       origin: valid.APP_ORIGIN,
+      storage: {
+        driver: "local",
+        path: resolve("data/uploads"),
+        maxBytes: 104857600,
+      },
     });
   });
   it("requires TLS with certificate verification remotely", () => {
@@ -71,6 +77,36 @@ describe("configuration trust boundary", () => {
         APP_ORIGIN: "https://portal.example.com",
       }).ssl,
     ).toEqual({ rejectUnauthorized: true });
+  });
+  it("validates consumed local, S3 and R2 storage without exposing credentials", () => {
+    const cloud = {
+      ...valid,
+      STORAGE_DRIVER: "s3",
+      STORAGE_S3_BUCKET: "private-files",
+      STORAGE_S3_REGION: "auto",
+      STORAGE_S3_ACCESS_KEY: "synthetic-access",
+      STORAGE_S3_SECRET_KEY: "synthetic-secret",
+      STORAGE_S3_ENDPOINT: "https://synthetic.r2.cloudflarestorage.com",
+    };
+    expect(readConfiguration(cloud).storage.driver).toBe("s3");
+    expect(
+      readConfiguration({ ...cloud, STORAGE_S3_ENDPOINT: "" }).storage.driver,
+    ).toBe("s3");
+    expect(() =>
+      readConfiguration({ ...cloud, STORAGE_S3_SECRET_KEY: "" }),
+    ).toThrow("requires");
+    expect(() =>
+      readConfiguration({ ...cloud, STORAGE_DRIVER: "local" }),
+    ).toThrow("requires STORAGE_DRIVER=s3");
+    expect(() =>
+      readConfiguration({
+        ...cloud,
+        STORAGE_S3_ENDPOINT: "https://user:secret@example.com",
+      }),
+    ).toThrow("HTTPS origin");
+    expect(() =>
+      readConfiguration({ ...valid, MAX_UPLOAD_SIZE_MB: "101" }),
+    ).toThrow("MAX_UPLOAD_SIZE_MB");
   });
 });
 

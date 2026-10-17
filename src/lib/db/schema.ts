@@ -12,6 +12,8 @@ import {
   date,
   primaryKey,
   uniqueIndex,
+  bigserial,
+  bigint,
 } from "drizzle-orm/pg-core";
 
 export const installation = pgTable(
@@ -259,5 +261,78 @@ export const projectActivity = pgTable(
   },
   (table) => [
     index("project_activity_created").on(table.projectId, table.createdAt),
+  ],
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    position: bigserial({ mode: "number" }).notNull().unique(),
+    clientId: uuid("client_id").references(() => clients.id),
+    projectId: uuid("project_id").references(() => projects.id),
+    senderType: text("sender_type").$type<"operator" | "client">().notNull(),
+    senderId: uuid("sender_id").notNull(),
+    body: text().notNull(),
+    fingerprint: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "message_one_conversation",
+      sql`(${table.clientId} is null) <> (${table.projectId} is null)`,
+    ),
+    check(
+      "message_sender_type",
+      sql`${table.senderType} in ('operator','client')`,
+    ),
+    check("message_body_length", sql`length(${table.body}) <= 4000`),
+    index("messages_client_position").on(table.clientId, table.position),
+    index("messages_project_position").on(table.projectId, table.position),
+  ],
+);
+
+export const messageAttachments = pgTable(
+  "message_attachments",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id),
+    filename: text().notNull(),
+    key: text("storage_key").notNull().unique(),
+    driver: text().$type<"local" | "s3">().notNull(),
+    size: bigint({ mode: "number" }).notNull(),
+    mimeType: text("mime_type").notNull(),
+    sha256: text().notNull(),
+  },
+  (table) => [
+    index("message_attachments_message").on(table.messageId),
+    check(
+      "message_attachment_size",
+      sql`${table.size} > 0 and ${table.size} <= 104857600`,
+    ),
+    check("message_attachment_driver", sql`${table.driver} in ('local','s3')`),
+  ],
+);
+
+export const messageReads = pgTable(
+  "message_reads",
+  {
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id),
+    actorId: uuid("actor_id").notNull(),
+    actorType: text("actor_type").$type<"operator" | "client">().notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.actorId] }),
+    check(
+      "message_reader_type",
+      sql`${table.actorType} in ('operator','client')`,
+    ),
   ],
 );

@@ -14,6 +14,9 @@ import {
 } from "../../../../components/client-forms";
 import { AppError } from "../../../../lib/errors";
 import type { Metadata } from "next";
+import { MessageThread } from "../../../../components/message-thread";
+import { ProjectLive } from "../../../../components/project-live";
+import { readConfiguration } from "../../../../lib/config";
 
 export const metadata: Metadata = { title: "Client details" };
 
@@ -35,7 +38,7 @@ export default async function ClientDetail({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<ReactElement> {
-  await operatorForPage();
+  const identity = await operatorForPage();
   const { id } = await params;
   if (!clientId.safeParse(id).success) notFound();
   const client = await getClient(id).catch((error: unknown) => {
@@ -109,6 +112,15 @@ export default async function ClientDetail({
           )}
         </section>
       </div>
+      {!client.deletedAt && (
+        <ProjectLive clientId={id}>
+          <MessageThread
+            conversation={{ kind: "client", id }}
+            actorId={identity.id}
+            maxBytes={readConfiguration().storage.maxBytes}
+          />
+        </ProjectLive>
+      )}
       <section className="card">
         <h2>Client activity</h2>
         {activity.length ? (

@@ -5,6 +5,7 @@ import { getBranding } from "../../../lib/settings";
 import { BrandFrame } from "../../../components/brand";
 import { LogoutButton } from "../../../components/auth-forms";
 import Link from "next/link";
+import { MessageNotifications } from "../../../components/message-notifications";
 export const dynamic = "force-dynamic";
 export default async function PortalLayout({
   children,
@@ -20,6 +21,7 @@ export default async function PortalLayout({
         <nav className="actions portal-nav">
           <a href="/portal">Your account</a>
           <Link href="/portal/projects">Projects</Link>
+          <MessageNotifications role="client" />
           <LogoutButton destination="/portal/login" />
         </nav>
         {children}

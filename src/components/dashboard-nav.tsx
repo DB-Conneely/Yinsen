@@ -2,6 +2,7 @@
 import type { ReactElement } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MessageNotifications } from "./message-notifications";
 export function DashboardNavigation(): ReactElement {
   const pathname = usePathname();
   return (
@@ -28,6 +29,7 @@ export function DashboardNavigation(): ReactElement {
       >
         Projects
       </Link>
+      <MessageNotifications role="operator" />
       <Link href="/" className="public-nav">
         <span aria-hidden="true">↗</span>Public portal
       </Link>

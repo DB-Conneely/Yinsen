@@ -4,22 +4,25 @@ import { useRouter } from "next/navigation";
 
 export function ProjectLive({
   projectId,
+  clientId,
   children,
 }: {
   projectId?: string;
+  clientId?: string;
   children: ReactNode;
 }): ReactElement {
   const router = useRouter();
   const [connection, setConnection] = useState("Connecting to live updates…");
   useEffect(() => {
     const source = new EventSource(
-      `/api/events${projectId ? `?projectId=${projectId}` : ""}`,
+      `/api/events${projectId ? `?projectId=${projectId}` : clientId ? `?clientId=${clientId}` : ""}`,
     );
     source.onopen = (): void => {
       setConnection("Live updates connected");
       router.refresh();
     };
     source.addEventListener("refresh", () => {
+      window.dispatchEvent(new Event("yinsen:refresh"));
       router.refresh();
     });
     source.addEventListener("revoked", () => {
@@ -39,10 +42,8 @@ export function ProjectLive({
     return () => {
       source.close();
     };
-  }, [projectId, router]);
-  const visible =
-    connection === "Live updates connected" ||
-    connection === "Connecting to live updates…";
+  }, [projectId, clientId, router]);
+  const visible = !connection.startsWith("Access changed.");
   return (
     <>
       <p className="live-status" role="status">

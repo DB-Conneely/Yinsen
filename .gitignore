@@ -67,7 +67,7 @@ full.md
 # Operator data, uploads, database volumes, backup/recovery and archives
 data/
 uploads/
-storage/
+/storage/
 volumes/
 backups/
 recovery/

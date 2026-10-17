@@ -1,5 +1,6 @@
 import nextEnv from "@next/env";
 import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 
 nextEnv.loadEnvConfig(process.cwd());
 const {
@@ -11,7 +12,12 @@ const {
 } = process.env;
 const child = spawn(process.execPath, [".next/standalone/server.js"], {
   stdio: "inherit",
-  env: runtimeEnvironment,
+  env: {
+    ...runtimeEnvironment,
+    STORAGE_LOCAL_PATH: resolve(
+      runtimeEnvironment.STORAGE_LOCAL_PATH || "./data/uploads",
+    ),
+  },
 });
 child.on("error", () => {
   process.stderr.write(

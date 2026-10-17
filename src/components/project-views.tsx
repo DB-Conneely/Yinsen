@@ -15,6 +15,9 @@ import { ProjectForm } from "./project-form";
 import { ProjectActions } from "./project-actions";
 import { MilestoneEditor, MilestoneActions } from "./milestone-editor";
 import { projectStatus } from "../lib/projects/validation";
+import { MessageThread } from "./message-thread";
+import { readConfiguration } from "../lib/config";
+import { messageSummary } from "../lib/messages/queries";
 
 function status(value: string): string {
   return value.replaceAll("_", " ");
@@ -50,6 +53,7 @@ export async function ProjectList({
     actor,
     parsed.success ? { status: parsed.data } : {},
   );
+  const summary = await messageSummary(actor);
   const root =
     actor.role === "operator" ? "/dashboard/projects" : "/portal/projects";
   return (
@@ -93,6 +97,19 @@ export async function ProjectList({
             >
               <span className="status-badge">{status(project.status)}</span>
               <h2>{project.name}</h2>
+              {summary.conversations.find(
+                (item) => item.kind === "project" && item.id === project.id,
+              )?.unread ? (
+                <span className="unread-badge">
+                  {
+                    summary.conversations.find(
+                      (item) =>
+                        item.kind === "project" && item.id === project.id,
+                    )?.unread
+                  }{" "}
+                  unread
+                </span>
+              ) : null}
               <p>{project.clientName}</p>
               <p>{budget(project.budget, project.currency)}</p>
               <p>
@@ -238,6 +255,11 @@ export async function ProjectWorkspace({
           </details>
         )}
       </section>
+      <MessageThread
+        conversation={{ kind: "project", id }}
+        actorId={actor.id}
+        maxBytes={readConfiguration().storage.maxBytes}
+      />
       <section className="card">
         <h2>Project activity</h2>
         <ol className="activity-list">

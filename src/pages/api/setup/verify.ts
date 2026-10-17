@@ -7,6 +7,7 @@ import { checkDatabase } from "../../../lib/db/health";
 import { verifyEmail } from "../../../lib/email/resend";
 import { consumeLoginAttempt } from "../../../lib/auth/rate-limit";
 import { AppError } from "../../../lib/errors";
+import { verifyStorage } from "../../../lib/storage/adapter";
 
 export const config = { api: { bodyParser: false } };
 export default async function verifySetup(
@@ -40,7 +41,7 @@ export default async function verifySetup(
       database: "configured",
       email: await verifyEmail(),
       payments: "skipped",
-      storage: "skipped",
+      storage: await verifyStorage(),
     };
   });
   response.headers.forEach((value, key) => res.setHeader(key, value));

@@ -153,6 +153,7 @@ function Integrations({
   email,
   manual,
   chooseManual,
+  storage,
 }: {
   status: string;
   verify: () => void;
@@ -160,6 +161,7 @@ function Integrations({
   email: EmailStatus;
   manual: boolean;
   chooseManual: (checked: boolean) => void;
+  storage: string;
 }): ReactElement {
   return (
     <section>
@@ -188,7 +190,7 @@ function Integrations({
         </li>
         <li>
           <strong>File storage</strong>
-          <span>Skipped · no files required for setup</span>
+          <span>{storage || "Not checked"}</span>
         </li>
       </ul>
       <button
@@ -217,9 +219,10 @@ function Integrations({
   );
 }
 
-async function verifyInstallation(): Promise<
-  Exclude<EmailStatus, "unchecked">
-> {
+async function verifyInstallation(): Promise<{
+  email: Exclude<EmailStatus, "unchecked">;
+  storage: "local" | "s3";
+}> {
   const response = await fetch("/api/setup/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -231,6 +234,7 @@ async function verifyInstallation(): Promise<
         .object({
           database: z.literal("configured"),
           email: z.enum(["accepted", "skipped", "failed"]),
+          storage: z.enum(["local", "s3"]),
         })
         .nullable(),
     })
@@ -241,7 +245,7 @@ async function verifyInstallation(): Promise<
       "VERIFY_FAILED",
       "Verification failed. Check the database and operator instructions.",
     );
-  return result.data.email;
+  return result.data;
 }
 
 function useWizard(): {
@@ -252,6 +256,7 @@ function useWizard(): {
   pending: boolean;
   status: string;
   email: EmailStatus;
+  storage: string;
   manual: boolean;
   chooseManual: (checked: boolean) => void;
   submit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -269,6 +274,7 @@ function useWizard(): {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState("");
   const [email, setEmail] = useState<EmailStatus>("unchecked");
+  const [storage, setStorage] = useState("");
   const [manual, chooseManual] = useState(false);
   async function verify(): Promise<void> {
     setPending(true);
@@ -279,8 +285,13 @@ function useWizard(): {
     try {
       const outcome = await verifyInstallation();
       setStatus("Configured · connection verified");
-      setEmail(outcome);
-      if (outcome === "failed")
+      setEmail(outcome.email);
+      setStorage(
+        outcome.storage === "local"
+          ? "Local · directory checked"
+          : "S3 compatible · bucket reachable; upload verified on first attachment",
+      );
+      if (outcome.email === "failed")
         setError(
           "Email verification failed. Retry after checking Resend configuration, or continue with manual login links.",
         );
@@ -345,6 +356,7 @@ function useWizard(): {
     pending,
     status,
     email,
+    storage,
     manual,
     chooseManual,
     submit,
@@ -409,6 +421,7 @@ export function SetupWizard(): ReactElement {
           {wizard.step === 2 && (
             <Integrations
               status={wizard.status}
+              storage={wizard.storage}
               email={wizard.email}
               manual={wizard.manual}
               chooseManual={wizard.chooseManual}

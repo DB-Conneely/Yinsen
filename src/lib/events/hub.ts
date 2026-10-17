@@ -1,4 +1,4 @@
-type Change = { projectId?: string; clientIds: string[] };
+type Change = { projectId?: string; clientId?: string; clientIds: string[] };
 type Listener = (change: Change) => void;
 declare global {
   var yinsenProjectListeners: Set<Listener> | undefined;
@@ -37,4 +37,9 @@ export function publishProject(projectId: string, clientIds: string[]): void {
 export function publishClientAccess(clientId: string): void {
   for (const listener of globalThis.yinsenProjectListeners ?? [])
     listener({ clientIds: [clientId] });
+}
+
+export function publishConversation(clientId: string): void {
+  for (const listener of globalThis.yinsenProjectListeners ?? [])
+    listener({ clientId, clientIds: [clientId] });
 }

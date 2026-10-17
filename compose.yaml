@@ -40,10 +40,20 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_PATH: /app/data/uploads
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-}
+      STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
+      STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-}
+      STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-}
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     depends_on:
       postgres: { condition: service_healthy }
+    volumes:
+      - uploads_data:/app/data/uploads
     healthcheck:
       test:
         [
@@ -58,3 +68,4 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
+  uploads_data:

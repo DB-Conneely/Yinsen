@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ConfigurationError } from "./errors";
+import { resolve } from "node:path";
 
 const environmentSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -16,14 +17,89 @@ const environmentSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.email().max(254).toLowerCase().optional(),
   ),
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  STORAGE_LOCAL_PATH: z.string().min(1).default("./data/uploads"),
+  MAX_UPLOAD_SIZE_MB: z.coerce.number().int().min(1).max(100).default(100),
 });
+
+export type StorageConfiguration =
+  | { driver: "local"; path: string; maxBytes: number }
+  | {
+      driver: "s3";
+      path: string;
+      maxBytes: number;
+      bucket: string;
+      region: string;
+      endpoint?: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+    };
 
 export type Configuration = {
   databaseUrl: string;
   origin: string;
   ssl: false | { rejectUnauthorized: true };
   email?: { key: string; from: string };
+  storage: StorageConfiguration;
 };
+
+function storageConfiguration(
+  environment: Record<string, string | undefined>,
+  driver: "local" | "s3",
+  path: string,
+  maxBytes: number,
+): StorageConfiguration {
+  const fields = ["BUCKET", "REGION", "ACCESS_KEY", "SECRET_KEY"] as const;
+  const supplied = fields.some((key) => environment[`STORAGE_S3_${key}`]);
+  if (driver === "local") {
+    if (supplied || environment.STORAGE_S3_ENDPOINT)
+      throw new ConfigurationError(
+        "S3 configuration requires STORAGE_DRIVER=s3. See .env.example.",
+      );
+    return { driver, path: resolve(path), maxBytes };
+  }
+  const parsed = z
+    .object({
+      STORAGE_S3_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
+      STORAGE_S3_REGION: z.string().regex(/^[a-z0-9-]+$/),
+      STORAGE_S3_ACCESS_KEY: z.string().min(1),
+      STORAGE_S3_SECRET_KEY: z.string().min(1),
+    })
+    .safeParse(environment);
+  if (!parsed.success)
+    throw new ConfigurationError(
+      "S3 storage requires bucket, region, access key and secret key together. See .env.example.",
+    );
+  const endpoint = environment.STORAGE_S3_ENDPOINT || undefined;
+  if (endpoint) {
+    const url = z.url().safeParse(endpoint);
+    if (!url.success)
+      throw new ConfigurationError("Invalid STORAGE_S3_ENDPOINT.");
+    const target = new URL(url.data);
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname);
+    if (
+      target.username ||
+      target.password ||
+      target.search ||
+      target.hash ||
+      target.pathname !== "/" ||
+      (target.protocol !== "https:" && !(local && target.protocol === "http:"))
+    )
+      throw new ConfigurationError(
+        "STORAGE_S3_ENDPOINT must be an HTTPS origin (localhost HTTP is allowed for private development).",
+      );
+  }
+  return {
+    driver,
+    path: resolve(path),
+    maxBytes,
+    bucket: parsed.data.STORAGE_S3_BUCKET,
+    region: parsed.data.STORAGE_S3_REGION,
+    accessKeyId: parsed.data.STORAGE_S3_ACCESS_KEY,
+    secretAccessKey: parsed.data.STORAGE_S3_SECRET_KEY,
+    ...(endpoint ? { endpoint } : {}),
+  };
+}
 
 export function databaseConnection(
   url: string,
@@ -95,5 +171,11 @@ export function readConfiguration(
     ...databaseConnection(result.data.DATABASE_URL, result.data.DATABASE_SSL),
     origin: origin.origin,
     ...(key && from ? { email: { key, from } } : {}),
+    storage: storageConfiguration(
+      environment,
+      result.data.STORAGE_DRIVER,
+      result.data.STORAGE_LOCAL_PATH,
+      result.data.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+    ),
   };
 }

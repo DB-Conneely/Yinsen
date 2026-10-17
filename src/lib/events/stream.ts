@@ -2,14 +2,18 @@ import { projectActor, projectAccess } from "../projects/access";
 import { requestToken } from "../auth/session";
 import { subscribeProjects } from "./hub";
 import { AppError } from "../errors";
+import { conversationAccess } from "../messages/access";
 
 export async function projectStream(
   request: Request,
   projectId?: string,
+  clientId?: string,
 ): Promise<Response> {
   const token = requestToken(request);
   const actor = await projectActor(token);
   if (projectId) await projectAccess(projectId, actor);
+  if (clientId)
+    await conversationAccess({ kind: "client", id: clientId }, actor);
   let cleanup = (): void => undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -31,6 +35,8 @@ export async function projectStream(
         try {
           const current = await projectActor(token);
           if (projectId) await projectAccess(projectId, current);
+          if (clientId)
+            await conversationAccess({ kind: "client", id: clientId }, current);
           send(refresh ? "refresh" : "heartbeat");
         } catch (error: unknown) {
           send(
@@ -47,6 +53,9 @@ export async function projectStream(
       const unsubscribe = subscribeProjects((change) => {
         if (
           (!change.projectId || !projectId || projectId === change.projectId) &&
+          (!clientId || !change.projectId) &&
+          (!change.clientId ||
+            (!projectId && (!clientId || clientId === change.clientId))) &&
           (actor.role === "operator" || change.clientIds.includes(actor.id))
         )
           schedule(true);
