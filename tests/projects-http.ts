@@ -90,6 +90,46 @@ try {
   assert.equal(created.response.status, 200);
   const id = idFrom(created.data),
     path = `/api/projects/${id}`;
+  const scopedList = await call(
+    `/api/projects?status=draft&client_id=${primary.id}`,
+    "GET",
+    undefined,
+    member.credential,
+  );
+  assert.equal(scopedList.response.status, 200);
+  assert.ok(
+    z
+      .array(z.object({ id: z.uuid() }))
+      .parse(scopedList.data)
+      .some((project) => project.id === id),
+  );
+  const foreignList = await call(
+    `/api/projects?status=draft&client_id=${primary.id}`,
+    "GET",
+    undefined,
+    outsider.credential,
+  );
+  assert.equal(foreignList.response.status, 200);
+  assert.equal(
+    z
+      .array(z.object({ id: z.uuid() }))
+      .parse(foreignList.data)
+      .some((project) => project.id === id),
+    false,
+  );
+  assert.equal(
+    (await call("/api/projects?status=completed", "GET", undefined, operator))
+      .response.status,
+    400,
+  );
+  const authorizedDetail = await call(
+    path,
+    "GET",
+    undefined,
+    member.credential,
+  );
+  assert.equal(authorizedDetail.response.status, 200);
+  assert.equal(idFrom(authorizedDetail.data), id);
   assert.equal((await call(path)).response.status, 401);
   const foreign = await call(path, "GET", undefined, outsider.credential),
     absent = await call(
@@ -133,6 +173,25 @@ try {
     operator,
   );
   assert.equal(milestone.response.status, 200);
+  const ordered = await call(
+    path + "/milestones",
+    "GET",
+    undefined,
+    member.credential,
+  );
+  assert.equal(ordered.response.status, 200);
+  assert.equal(
+    z
+      .array(z.object({ position: z.number(), name: z.string() }))
+      .parse(ordered.data)[0]?.name,
+    "HTTP milestone",
+  );
+  assert.equal(
+    (await call(path + "/milestones", "GET", undefined, outsider.credential))
+      .response.status,
+    404,
+  );
+  assert.equal((await call(path + "/milestones")).response.status, 401);
   const m = z
     .object({ milestones: z.array(z.object({ id: z.uuid() })).min(1) })
     .parse(milestone.data).milestones[0];
@@ -205,13 +264,21 @@ try {
     body: JSON.stringify({ name: "Forged" }),
   });
   assert.equal(wrongOrigin.status, 403);
+  assert.equal(
+    (await call(milestonePath, "DELETE", {}, operator)).response.status,
+    200,
+  );
+  assert.deepEqual(
+    (await call(path + "/milestones", "GET", undefined, operator)).data,
+    [],
+  );
   assert.equal((await call(path, "DELETE", {}, operator)).response.status, 200);
   assert.equal(
     (await call(path, "GET", undefined, operator)).response.status,
     404,
   );
   process.stdout.write(
-    "Installed project HTTP/SQL proof passed: role/scope/CSRF denial, max integer budget, concurrent lock-in/approval, milestone preservation, pause/resume, removal and soft delete.\n",
+    "Installed project HTTP/SQL proof passed: scoped/filter/detail/ordered-milestone GET paths, role/scope/CSRF denial, max integer budget, concurrent lock-in/approval, milestone preservation/deletion, pause/resume, removal and soft delete.\n",
   );
 } finally {
   await getSql().end();
