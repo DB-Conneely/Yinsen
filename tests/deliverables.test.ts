@@ -322,6 +322,26 @@ describe("wired milestone deliverables and private per-version release", () => {
       statusCode: 404,
     });
   });
+  it("serializes concurrent download activity before opening private bytes", async () => {
+    const file = await send();
+    // Warm real connections so startup cannot serialize the concurrent batch.
+    await Promise.all(Array.from({ length: 5 }, () => getSql()`select 1`));
+    const before =
+      await getSql()`select id from project_activity where project_id=${projectId} and event_type='deliverable.downloaded'`;
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 5 }, () =>
+        downloadDeliverable(file.id, operator).then((response) =>
+          response.text(),
+        ),
+      ),
+    );
+    expect(outcomes).toEqual(
+      Array.from({ length: 5 }, () => ({ status: "fulfilled", value: bytes })),
+    );
+    expect(
+      await getSql()`select id from project_activity where project_id=${projectId} and event_type='deliverable.downloaded'`,
+    ).toHaveLength(before.length + 5);
+  });
   it("preserves existing milestone deletion with committed cascade and private byte cleanup", async () => {
     const file = await send();
     const rows = await getSql()<

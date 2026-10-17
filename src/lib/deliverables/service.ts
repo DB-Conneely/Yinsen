@@ -231,8 +231,8 @@ export async function downloadDeliverable(
 ): Promise<Response> {
   const { projectId } = await fileProject(id);
   return getSql().begin(async (sql) => {
-    // Membership edits/relock cannot race the authorization decision before opening private bytes.
-    await sql`select id from projects where id=${projectId} for share`;
+    // Downloads record activity, so take the writer lock before any project update.
+    await sql`select id from projects where id=${projectId} for update`;
     const current = await currentFile(sql, projectId, id, actor);
     if (actor.role === "client" && !current.released)
       throw new AppError(

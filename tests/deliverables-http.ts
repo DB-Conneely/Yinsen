@@ -245,7 +245,7 @@ try {
       operator,
       randomUUID(),
       undefined,
-      "x".repeat(1048577),
+      "x".repeat(readConfiguration().storage.maxBytes + 1),
     ),
     413,
   );
