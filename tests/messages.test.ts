@@ -299,6 +299,27 @@ describe("actual conversation writers, bounded files and current authorization",
     expect(
       await getSql()`select id from message_attachments where message_id=${id}`,
     ).toHaveLength(1);
+    const invalidations: string[] = [];
+    const unsubscribe = subscribeProjects((change) => {
+      if (change.clientId) invalidations.push(change.clientId);
+    });
+    await send(
+      general,
+      "Hello client",
+      operator,
+      [
+        {
+          filename: "notes.txt",
+          body: new Blob([bytes], { type: "text/plain" }),
+        },
+      ],
+      id,
+    );
+    unsubscribe();
+    expect(invalidations).toEqual([primary.id]);
+    expect(
+      await getSql()`select id from activity_events where client_id=${primary.id} and event_type='message.sent'`,
+    ).toHaveLength(1);
     const file = pages[0]?.messages.find((message) => message.id === id)
       ?.attachments[0];
     if (!file) throw new TypeError("Missing stored attachment");

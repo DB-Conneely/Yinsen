@@ -69,7 +69,7 @@ async function persistMessage(
   upload: MessageUpload,
   actor: ProjectActor,
   created: StoredFile[],
-): Promise<boolean> {
+): Promise<void> {
   const fingerprint = messageFingerprint(upload);
   const existing =
     await sql`select id,sender_id,sender_type,fingerprint,client_id,project_id from messages where id=${resourceId.parse(upload.requestId)}`;
@@ -87,7 +87,7 @@ async function persistMessage(
         "MESSAGE_CONFLICT",
         "This send has changed. Start a new message.",
       );
-    return false;
+    return;
   }
   await sql`insert into messages(id,client_id,project_id,sender_type,sender_id,body,fingerprint,created_at) values (${upload.requestId},${conversation.kind === "client" ? conversation.id : null},${conversation.kind === "project" ? conversation.id : null},${actor.role},${actor.id},${upload.body},${fingerprint},clock_timestamp())`;
   await persistAttachments(sql, upload, created);
@@ -95,7 +95,6 @@ async function persistMessage(
     await projectActivity(sql, conversation.id, actor, "message.sent");
   else
     await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values (${conversation.id},${actor.role},${actor.id},'message.sent')`;
-  return true;
 }
 
 export async function sendMessage(
@@ -110,22 +109,17 @@ export async function sendMessage(
     const result = await getSql().begin(async (sql) => {
       try {
         await conversationAccess(conversation, actor, sql, "update");
-        const changed = await persistMessage(
-          sql,
-          conversation,
-          upload,
-          actor,
-          created,
-        );
-        return { changed, page: await messageRows(sql, conversation, actor) };
+        await persistMessage(sql, conversation, upload, actor, created);
+        return await messageRows(sql, conversation, actor);
       } catch (error: unknown) {
         callbackFailed = true;
         throw error;
       }
     });
     committed = true;
-    if (result.changed) await publish(conversation);
-    return result.page;
+    // Retrying a lost COMMIT response must also repair its missed live invalidation.
+    await publish(conversation);
+    return result;
   } finally {
     // Only a failed callback proves COMMIT was never requested. A lost COMMIT reply retains bytes.
     if (!committed && callbackFailed) await removeFailedFiles(created);
