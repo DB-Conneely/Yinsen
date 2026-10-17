@@ -203,3 +203,123 @@ runtime/heavy/browser lease was explicitly returned to the orchestrator.
 Source and configuration remain frozen. Dedicated fresh patch ownership,
 coordinated shared edits and fresh QA repair/re-exercise remain outstanding;
 **fresh QA alone owns the Phase 2 verdict**.
+
+## Patch dispositions — 17 October 2026
+
+Fresh report owner `/root/patch_23_remote` independently reproduced both
+findings, assessed their actual callers and completed the following repairs.
+The original audit above is preserved verbatim. This disposition is not a
+phase verdict; fresh QA owns acceptance.
+
+### A23-01 — repaired: strict writes with readable historical terms
+
+The shared PostgreSQL-compatible date boundary now accepts four-digit years
+0001–9999 and preserves nullable/omitted semantics. A21 was the sole writer of
+`src/lib/projects/validation.ts`, after direct agreement with A23; actual
+manual project/milestone and proposal consumers use that boundary. Its manual
+boundary proof is `.local/patch-phase02-task21/date-proof.json`.
+
+A23 owns `src/lib/messages/proposal-validators.ts`, `queries.ts` and
+`proposal-actions.ts`. New proposal/counter writes remain strict.
+`storedProposalTerms` retains the same structural, amount and size limits but
+allows the previously accepted historical date domain; both server message
+rows and the client `proposalView` consume it. An old invalid date therefore
+does not make the entire conversation unreadable. Acceptance validates the
+stored terms strictly inside the existing locked transaction and returns
+**400 PROPOSAL_TERMS_INVALID** with guidance to counter using valid dates or
+reject. It creates neither a partial project nor a terminal message. Shared
+project/milestone writers, authority, chain checks, immutable history and
+atomicity remain consumed by the installed route.
+
+Fresh ordinary requests against preserved old image 3026 created genuine
+historical JSON-object proposals and reproduced send200/accept503/retry503.
+The final patched 3027 route rejected new invalid proposal/counter dates before
+persistence; repeated historical acceptance returned actionable400 with SQL
+counts unchanged. The real client UI rendered the old cards, showed the
+bounded acceptance error, preserved counter prefill, accepted a corrected
+0001-dated counter into an active project with exact stored terms, and rejected
+the second old proposal. Original terms remained unchanged. Final installed
+`test:proposals` additionally passed valid 0001/9999/null boundaries and
+historical read/counter/reject recovery. Evidence:
+`.local/patch-phase02-task23/baseline-3.json`, `runtime-accepted.json` and
+`http-proposals-final.{json,log}`.
+
+### A23-02 — repaired: confirmed results, focus and stable retry feedback
+
+A23 is the sole writer of `src/components/message-thread.tsx` and
+`proposal-card.tsx`; A22 directly acknowledged the shared messaging contract
+and reviewed compatibility. Confirmed proposal actions install the returned
+authoritative page, clear the actual search control/state and invalidate older
+GET generations. Ordinary composer text/files remain mounted and retained;
+failed proposal requests retain their filter, edited terms and action UUID.
+Cancel/Escape still restore the original trigger.
+
+Success callbacks pass the exact confirmed UUID. A parent layout effect acts
+after the message page and closed dialog commit, focuses that article and
+scrolls its heading into view. Each intent is consumed once, so later SSE
+updates do not steal the ordinary composer cursor. Proposal success suppresses
+the generic bottom-follow path that could compete with this focus. When a
+same-ID recovery returns a latest-50 page that excludes its original action,
+the existing status area instead gives a focused, visible saved acknowledgment
+and the existing Load earlier path. Its guidance retires when the card is
+loaded and clears on a new explicit search/attempt or ordinary confirmed send.
+No notification framework, API expansion or history rewrite was added.
+
+Final real browser proof passed **20 assertions** with no page errors: both
+roles' new proposals and counters under nonmatching filters, tall cards with
+full headings inside the actual scrollport and browser viewport, exact UUID
+focus, held older GETs, dropped committed responses and same-ID recovery,
+Cancel/Escape, retained text/file drafts, later SSE focus stability, ordinary
+multipart text send and actual visible-read persistence. The separate busy
+thread proof added 55 actual incoming messages: retry200 excluded the original
+UUID, the saved acknowledgment was fully visible/focused, Load earlier reached
+the exact card, and a new search cleared guidance. Evidence:
+`runtime-accepted.{json,log}`, `busy-retry-fixed.{json,log,png}` and their
+screenshots under `.local/patch-phase02-task23/`. Current screenshots were
+visually inspected as well as checked geometrically.
+
+### Final source, gates, preserved failures and handoff limits
+
+All final proof binds **159 source/configuration files**, SHA-256
+`327377cc01594a2b0fdc67ba25d783ad29ac604a307bb6152e2d00ab6ec2745b`,
+standalone build **ONQhJHtaYOeOl2p0-Ng7C**, recorded in
+`.local/patch-phase02-task23/source-current.json`. After the last production
+edit, `check-postcommit.log` passed strict types, zero-warning lint, formatting,
+**98 tests / eleven files / no skips**, markers and production build. Owned
+regressions are `tests/proposals.test.ts` and `tests/proposals-http.ts`. The
+final ordinary proposal HTTP suite passed current authority/CSRF, both
+directions, counters, dates/history, replay/races and actual rollback/retry.
+Its guarded retained-55434 fixture milestone INSERT denial was restored in
+`finally` and independently verified; `http-proposals-final.json` records the
+runtime role, permitted test database and restored grant.
+
+Failed and superseded evidence remains intact. `runtime-1.json` initially
+missed a real visibility/scroll precondition for read receipts;
+`read-followup.json` proved the actual visible-read contract. Earlier successful
+POST/DOM checks did not prove visible tall-card feedback. Screenshots and
+`runtime-final.json`, `busy-retry-1.json` and `focus-debug-client-held-trace.json`
+exposed the focus-restoration/RAF-before-commit failures that drove the final
+post-commit repair. `focus-postcommit-held.json` and the final full browser run
+re-exercised that exact held-GET/dropped-response failure successfully.
+
+The initial HTTP historical fixture accidentally stored a JSON string through
+raw SQL serializer binding. The tests now explicitly bind text then cast to
+JSONB and assert object shape; production does not tolerate malformed string
+terms. The untouched harness-only malformed row
+`b1161e6d-c01f-4f96-93f0-3c12660ac84f` is labelled in the final HTTP receipt.
+It is distinct from genuine old HTTP object records used for recovery proof.
+Earlier fixture/type/check failures remain recorded, not relabelled passes.
+
+Canonical 3000 was restored using the unchanged actual root environment
+(mode0600, original hash). `canonical.json` confirms its original singleton,
+six migration hashes and fourteen empty business tables. Current 3000/3027
+service identities are in A23's `service-{3000,3027}.json`; runtime custody was
+returned to root with all browser/SQL clients closed. Old 3026, databases,
+images, containers and uploads were preserved. No live email, new provider
+configuration, extra R2 upload, deployment or Git mutation occurred. These are
+source-runtime proofs, not claims about a newly built container image.
+Unchanged provider/scheduler facts remain inherited. Maps are stale pending
+root's assigned refresh. Fresh QA must independently exercise the integrated
+final system, including the mandatory real CUA/native-file-picker and complete
+Phase 2/affected inherited workflow matrix. Phase 3 remains on hold until the
+user explicitly requests it.

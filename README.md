@@ -1,6 +1,6 @@
 # Yinsen
 
-Open-source, self-hosted client portal for freelancers and small agencies. Fresh independent QA verified Phase 1 on Abyss on 17 October 2026, including the installed foundation, operator/client access, shared light/dark interface and actual received-email login journey. Phase 2's projects and communication work is now in progress; see the [current handover](docs/handover.md) and [Phase 1 QA verdict](docs/qa/phase-01.md).
+Open-source, self-hosted client portal for freelancers and small agencies. Fresh independent QA verified Phase 1 on Abyss on 17 October 2026, including the installed foundation, operator/client access, shared light/dark interface and actual received-email login journey. Phase 2's projects, milestones, private messages/attachments and negotiated proposals are implemented and undergoing final integrated verification. Fresh QA must prove the complete delivered scope, including a real CUA desktop pass, before acceptance. Phase 3 is held at Neels's request; see the [current handover](docs/handover.md) and [Phase 1 QA verdict](docs/qa/phase-01.md).
 
 Start with [AGENTS.md](AGENTS.md), the [planning index](docs/rebuild/README.md) and [current handover](docs/handover.md). The original client-portal repository remains intact; this is a fresh Git repository with its own history, not a copied implementation or rewritten ancestry.
 
