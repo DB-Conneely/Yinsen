@@ -299,6 +299,42 @@ try {
   await data(
     await call(`/api/invoices/${sent.id}/settle`, "POST", receipt, operator),
   );
+  const projectActivity = z
+    .object({ activity: z.array(z.object({ eventType: z.string() })) })
+    .parse(
+      await data(
+        await call(
+          `/api/projects/${project.id}`,
+          "GET",
+          undefined,
+          outsider.cookie,
+        ),
+      ),
+    ).activity;
+  assert.equal(
+    projectActivity.some((event) => event.eventType.startsWith("invoice.")),
+    false,
+  );
+  assert.ok(
+    projectActivity.some((event) => event.eventType === "deliverable.released"),
+  );
+  assert.equal(
+    (
+      await getSql()`select id from project_activity where project_id=${project.id} and event_type like 'invoice.%'`
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await call(
+        `/api/deliverables/${root}/download`,
+        "GET",
+        undefined,
+        outsider.cookie,
+      )
+    ).status,
+    200,
+  );
   for (const id of [root, version]) {
     const response = await call(
       `/api/deliverables/${id}/download`,

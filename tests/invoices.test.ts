@@ -5,6 +5,7 @@ import { completeSetup, isSetupComplete } from "../src/lib/setup/service";
 import { loginOperator } from "../src/lib/auth/login";
 import { saveClient } from "../src/lib/clients/service";
 import { saveProject } from "../src/lib/projects/service";
+import { getProject } from "../src/lib/projects/queries";
 import {
   createMilestone,
   mutateMilestone,
@@ -237,6 +238,22 @@ describe("invoice money and frozen identity", () => {
     await expect(getInvoice(sent.id, outsider)).rejects.toMatchObject({
       statusCode: 404,
     });
+    expect(
+      (
+        await getSql()`select id from project_activity where project_id=${projectId} and event_type like 'invoice.%'`
+      ).length,
+    ).toBe(0);
+    await getSql()`insert into project_activity(project_id,actor_id,actor_type,event_type) values(${projectId},${actor.id},'operator','invoice.sent')`;
+    expect(
+      (await getProject(projectId, outsider)).activity.some((event) =>
+        event.eventType.startsWith("invoice."),
+      ),
+    ).toBe(false);
+    expect(
+      (
+        await getSql()`select id from activity_events where client_id=${client.id} and event_type='invoice.sent'`
+      ).length,
+    ).toBe(1);
     await getSql().begin(async (holder) => {
       await holder`select id from invoices where id=${sent.id} for update`;
       await expect(getInvoice(sent.id, outsider)).rejects.toMatchObject({

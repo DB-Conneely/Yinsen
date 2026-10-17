@@ -148,7 +148,7 @@ export async function getProject(
     >`select id,project_id as "projectId",name,description,status,position,due_date::text as "dueDate" from milestones where project_id=${id} order by position,id`,
     sql<
       ProjectDetail["activity"]
-    >`select id,event_type as "eventType",actor_type as "actorType",created_at::text as "createdAt" from project_activity where project_id=${id} order by created_at desc,id desc limit 30`,
+    >`select id,event_type as "eventType",actor_type as "actorType",created_at::text as "createdAt" from project_activity where project_id=${id} and event_type not like 'invoice.%' order by created_at desc,id desc limit 30`,
   ]);
   const project = rows[0];
   if (!project) throw new AppError(404, "NOT_FOUND", "Project not found.");

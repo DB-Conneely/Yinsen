@@ -8,7 +8,7 @@ import {
   lockProject,
   type ProjectActor,
 } from "../projects/access";
-import { projectActivity, projectMemberIds } from "../projects/service";
+import { projectMemberIds } from "../projects/service";
 import { resourceId, reviewedVersion } from "../projects/validation";
 import { publishProject, publishClientAccess } from "../events/hub";
 import { writeDeliverableRelease } from "../deliverables/service";
@@ -73,8 +73,6 @@ async function activity(
   event: string,
 ): Promise<void> {
   await sql`insert into activity_events(client_id,actor_type,actor_id,event_type) values(${invoice.clientId},${actor.role},${actor.id},${event})`;
-  if (invoice.projectId)
-    await projectActivity(sql, invoice.projectId, actor, event);
 }
 
 async function validateRelationship(
