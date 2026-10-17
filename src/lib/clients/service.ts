@@ -3,6 +3,7 @@ import type postgres from "postgres";
 import { getSql } from "../db/client";
 import { AppError } from "../errors";
 import { emailSchema } from "../auth/validation";
+import { publishClientAccess } from "../events/hub";
 
 const clientFields = z
   .object({
@@ -184,7 +185,7 @@ export async function archiveClient(
   actor: { id: string; role: "operator" },
   restore: boolean,
 ): Promise<Client> {
-  return getSql().begin(async (sql) => {
+  const result = await getSql().begin(async (sql) => {
     await lockClient(sql, id);
     const current = await getClient(id, sql);
     if (Boolean(current.deletedAt) === !restore) return current;
@@ -201,6 +202,8 @@ export async function archiveClient(
     );
     return getClient(id, sql);
   });
+  publishClientAccess(id);
+  return result;
 }
 
 export async function clientActivity(

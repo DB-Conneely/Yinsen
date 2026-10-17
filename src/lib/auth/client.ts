@@ -15,6 +15,7 @@ import { tokenDigest, SESSION_SECONDS, type Session } from "./session";
 import { emailSchema } from "./validation";
 import { sendMagicLink } from "../email/resend";
 import { logger } from "../logger";
+import { publishClientAccess } from "../events/hub";
 
 export type ClientIdentity = {
   id: string;
@@ -195,6 +196,7 @@ export async function revokeClientSession(
       throw new AppError(404, "NOT_FOUND", "Session not found.");
     await recordActivity(sql, id, actor, "client.session_revoked");
   });
+  publishClientAccess(id);
 }
 
 export async function destroyClientSession(token: string): Promise<void> {

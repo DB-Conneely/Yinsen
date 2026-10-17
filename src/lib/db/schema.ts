@@ -8,6 +8,10 @@ import {
   uuid,
   jsonb,
   index,
+  integer,
+  date,
+  primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const installation = pgTable(
@@ -145,5 +149,115 @@ export const activityEvents = pgTable(
   },
   (table) => [
     index("activity_client_created").on(table.clientId, table.createdAt),
+  ],
+);
+
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    description: text().notNull().default(""),
+    status: text()
+      .$type<"draft" | "pending_lockin" | "active" | "paused">()
+      .notNull()
+      .default("draft"),
+    budget: integer(),
+    currency: text().notNull(),
+    startDate: date("start_date"),
+    dueDate: date("due_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "projects_status",
+      sql`${table.status} in ('draft','pending_lockin','active','paused')`,
+    ),
+    check(
+      "projects_budget",
+      sql`${table.budget} is null or ${table.budget} >= 0`,
+    ),
+    check("projects_currency", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "projects_dates",
+      sql`${table.startDate} is null or ${table.dueDate} is null or ${table.dueDate} >= ${table.startDate}`,
+    ),
+  ],
+);
+
+export const projectClients = pgTable(
+  "project_clients",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    role: text().$type<"primary" | "member">().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.clientId] }),
+    uniqueIndex("project_one_primary")
+      .on(table.projectId)
+      .where(sql`${table.role} = 'primary'`),
+    check("project_client_role", sql`${table.role} in ('primary','member')`),
+  ],
+);
+
+export const milestones = pgTable(
+  "milestones",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    name: text().notNull(),
+    description: text().notNull().default(""),
+    status: text()
+      .$type<"pending" | "in_progress" | "review" | "approved">()
+      .notNull()
+      .default("pending"),
+    position: integer().notNull(),
+    dueDate: date("due_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("milestones_project_position").on(table.projectId, table.position),
+    check("milestones_position", sql`${table.position} >= 0`),
+    check(
+      "milestones_status",
+      sql`${table.status} in ('pending','in_progress','review','approved')`,
+    ),
+  ],
+);
+
+export const projectActivity = pgTable(
+  "project_activity",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    actorType: text("actor_type").$type<"operator" | "client">().notNull(),
+    actorId: uuid("actor_id").notNull(),
+    eventType: text("event_type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("project_activity_created").on(table.projectId, table.createdAt),
   ],
 );
