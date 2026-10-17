@@ -14,7 +14,7 @@ export default async function Login(): Promise<ReactElement> {
   if (!branding) redirect("/setup");
   return (
     <BrandFrame branding={branding}>
-      <main className="card narrow" id="main-content">
+      <main className="card narrow auth-shell" id="main-content">
         <h1>Operator login</h1>
         <p>Welcome back to {branding.brandName}.</p>
         <LoginForm />

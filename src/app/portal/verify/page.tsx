@@ -13,7 +13,7 @@ export default async function VerifyPage(): Promise<ReactElement> {
   if (!branding) redirect("/setup");
   return (
     <BrandFrame branding={branding}>
-      <main className="card narrow" id="main-content">
+      <main className="card narrow auth-shell" id="main-content">
         <h1>Sign in to your portal</h1>
         <VerifyClientLink />
       </main>
