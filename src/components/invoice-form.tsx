@@ -209,7 +209,7 @@ export function InvoiceForm({
               <option value="">Choose a client</option>
               {choices.clients.map((client) => (
                 <option key={client.id} value={client.id}>
-                  {client.name}
+                  {client.name} · {client.email}
                 </option>
               ))}
             </select>

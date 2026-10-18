@@ -130,6 +130,23 @@ afterAll(async () => {
 });
 
 describe("invoice money and frozen identity", () => {
+  it("distinguishes same-name recipient choices by their stored email and ID", async () => {
+    const recipients = await Promise.all(
+      ["first", "second"].map(async (label) => {
+        const email = `${label}-${randomUUID()}@example.test`;
+        const saved = await saveClient(
+          { name: "Same-name invoice recipient", email },
+          actor,
+        );
+        return { id: saved.id, name: "Same-name invoice recipient", email };
+      }),
+    );
+    const choices = await invoiceChoices(actor);
+    for (const recipient of recipients)
+      expect(choices.clients.find((item) => item.id === recipient.id)).toEqual(
+        recipient,
+      );
+  });
   it("rounds decimal quantities half up without float math and validates bounds", () => {
     expect(invoiceTotals(fields()).amount).toBe(12501);
     expect(

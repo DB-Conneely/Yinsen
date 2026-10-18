@@ -76,7 +76,13 @@ describe("the installed shared workspace navigation", () => {
           currency: "GBP",
           invoice: { ...invoice, status: "draft" },
           choices: {
-            clients: [{ id: invoice.clientId, name: "Recipient" }],
+            clients: [
+              {
+                id: invoice.clientId,
+                name: "Recipient",
+                email: invoice.recipientEmail,
+              },
+            ],
             projects: [
               {
                 id: invoice.projectId ?? "",
@@ -100,6 +106,33 @@ describe("the installed shared workspace navigation", () => {
       expect(html).toContain("any linked invoice");
     } finally {
       runtime.mockRestore();
+    }
+  });
+  it("shows distinct same-name recipients with stable UUID values on new and edit forms", () => {
+    const clients = [
+      {
+        id: invoice.clientId,
+        name: "Same-name recipient",
+        email: "first@example.test",
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000005",
+        name: "Same-name recipient",
+        email: "second@example.test",
+      },
+    ];
+    for (const editing of [false, true]) {
+      const html = renderToStaticMarkup(
+        createElement(InvoiceForm, {
+          currency: "GBP",
+          choices: { clients, projects: [], milestones: [] },
+          ...(editing ? { invoice: { ...invoice, status: "draft" } } : {}),
+        }),
+      );
+      for (const client of clients)
+        expect(html).toContain(
+          `<option value="${client.id}"${editing && client.id === invoice.clientId ? ' selected=""' : ""}>${client.name} · ${client.email}</option>`,
+        );
     }
   });
   it("keeps client management in the operator workspace and marks its actual route", () => {

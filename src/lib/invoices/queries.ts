@@ -95,7 +95,7 @@ export async function getInvoice(
 }
 
 export type InvoiceChoices = {
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; email: string }[];
   projects: { id: string; name: string; clientIds: string[] }[];
   milestones: { id: string; name: string; projectId: string }[];
 };
@@ -106,7 +106,7 @@ export async function invoiceChoices(
   const sql = getSql();
   const clients = await sql<
     InvoiceChoices["clients"]
-  >`select id,name from clients where deleted_at is null order by name,id`;
+  >`select id,name,email from clients where deleted_at is null order by name,id`;
   const projects = await sql<
     InvoiceChoices["projects"]
   >`select p.id,p.name,array(select pc.client_id::text from project_clients pc where pc.project_id=p.id) as "clientIds" from projects p where p.deleted_at is null order by p.name,p.id`;
