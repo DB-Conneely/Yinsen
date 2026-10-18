@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readConfiguration } from "../config";
 import { AppError } from "../errors";
 import type { InvoiceDetail } from "../invoices/queries";
@@ -136,19 +136,21 @@ export async function sendInvoiceEmail(input: {
   const amount = formatBudget(invoice.amount, invoice.currency);
   const summary = `Invoice ${invoice.number}: ${amount}${invoice.dueDate ? `, due ${invoice.dueDate}` : ""}`;
   const html = `<div style="max-width:600px;margin:auto;font-family:system-ui"><h1>${escapeHtml(invoice.issuerName)}</h1><p>Hi ${escapeHtml(invoice.recipientName)},</p><h2>${escapeHtml(summary)}</h2><p>Your invoice is ready. Sign in with your client account to review the complete items and payment instructions.</p><p><a style="display:inline-block;padding:16px;background:${escapeHtml(invoice.brandColour)};color:${actionTextColour(invoice.brandColour)}" href="${escapeHtml(input.url)}">View invoice</a></p><p>${escapeHtml(invoice.issuerEmail)}</p></div>`;
-  const result = z.object({ id: z.uuid() }).safeParse(
-    await resend(
-      "/emails",
-      {
-        from: email.from,
-        to: [invoice.recipientEmail],
-        subject: `New invoice from ${invoice.issuerName}: ${invoice.number}`,
-        html,
-        text: `Hi ${invoice.recipientName},\n${summary}\nReview your invoice from ${invoice.issuerName}: ${input.url}\nSign in with your client account.\n${invoice.issuerEmail}`,
-      },
-      `invoice/${invoice.id}/${invoice.revision}`,
-    ),
-  );
+  const message = {
+    from: email.from,
+    to: [invoice.recipientEmail],
+    subject: `New invoice from ${invoice.issuerName}: ${invoice.number}`,
+    html,
+    text: `Hi ${invoice.recipientName},\n${summary}\nReview your invoice from ${invoice.issuerName}: ${input.url}\nSign in with your client account.\n${invoice.issuerEmail}`,
+  };
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify(message))
+    .digest("hex");
+  const result = z
+    .object({ id: z.uuid() })
+    .safeParse(
+      await resend("/emails", message, `invoice/${invoice.id}/${fingerprint}`),
+    );
   if (!result.success)
     throw new AppError(
       503,

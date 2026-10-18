@@ -204,7 +204,7 @@ export async function releaseDeliverable(
   return result;
 }
 
-// Caller holds the project lock; manual release and later settlement share this transition.
+// Authorized callers hold the project lock; soft deletion must not block receipt of linked money.
 export async function writeDeliverableRelease(
   sql: postgres.TransactionSql,
   projectId: string,
@@ -212,7 +212,12 @@ export async function writeDeliverableRelease(
   released: boolean,
   actor: ProjectActor,
 ): Promise<Deliverable> {
-  const current = await currentFile(sql, projectId, id, actor);
+  operatorOnly(actor);
+  const rows = await sql<
+    Deliverable[]
+  >`select d.id,d.milestone_id as "milestoneId",d.parent_deliverable_id as "parentDeliverableId",d.version,d.filename,d.size::float8 as size,d.released,d.uploaded_at::text as "uploadedAt" from deliverables d join milestones m on m.id=d.milestone_id where d.id=${resourceId.parse(id)} and m.project_id=${resourceId.parse(projectId)}`;
+  const current = rows[0];
+  if (!current) throw new AppError(404, "NOT_FOUND", "Deliverable not found.");
   if (current.released !== released) {
     await sql`update deliverables set released=${released} where id=${id}`;
     await projectActivity(

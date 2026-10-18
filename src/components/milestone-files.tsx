@@ -16,9 +16,11 @@ function size(bytes: number): string {
 function FileVersion({
   file,
   operator,
+  fileNumber,
 }: {
   file: Deliverable;
   operator: boolean;
+  fileNumber?: number;
 }): ReactElement {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -47,7 +49,11 @@ function FileVersion({
   return (
     <div className="file-version">
       <div className="file-version-info">
-        <strong>{file.filename}</strong>
+        <strong>
+          {fileNumber === undefined
+            ? file.filename
+            : `File ${fileNumber} · ${file.filename}`}
+        </strong>
         <span>
           Version {file.version} · {size(file.size)} ·{" "}
           <time dateTime={file.uploadedAt}>
@@ -184,9 +190,9 @@ function UploadForm({
             Version of
             <select name="parentDeliverableId">
               <option value="">New deliverable</option>
-              {roots.map((root) => (
+              {roots.map((root, index) => (
                 <option key={root.id} value={root.id}>
-                  {root.filename}
+                  {`File ${index + 1} · ${root.filename}`}
                 </option>
               ))}
             </select>
@@ -243,7 +249,7 @@ export function MilestoneFiles({
       </h4>
       {roots.length ? (
         <ul className="deliverable-list">
-          {roots.map((root) => {
+          {roots.map((root, index) => {
             const versions = files
               .filter(
                 (file) =>
@@ -253,7 +259,11 @@ export function MilestoneFiles({
             const latest = versions[0] ?? root;
             return (
               <li key={root.id}>
-                <FileVersion file={latest} operator={operator} />
+                <FileVersion
+                  file={latest}
+                  operator={operator}
+                  fileNumber={index + 1}
+                />
                 {versions.length > 1 && (
                   <details className="file-history">
                     <summary>Previous versions ({versions.length - 1})</summary>

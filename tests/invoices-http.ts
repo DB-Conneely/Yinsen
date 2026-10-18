@@ -504,8 +504,48 @@ try {
     await getSql()`select status,amount,settlement_data from invoices where id=${sent.id}`;
   assert.equal(stored[0]?.status, "settled");
   assert.equal(stored[0]?.amount, 12000);
+  const retained = await draft();
+  await data(
+    await call(
+      `/api/invoices/${retained.id}/send`,
+      "POST",
+      { expectedRevision: retained.revision },
+      operator,
+    ),
+  );
+  await data(await call(`/api/projects/${project.id}`, "DELETE", {}, operator));
+  await data(
+    await call(
+      `/api/invoices/${retained.id}/settle`,
+      "POST",
+      { ...receipt, amountReceived: retained.amount },
+      operator,
+    ),
+  );
+  const retainedInvoice = invoiceSchema.parse(
+    await data(
+      await call(
+        `/api/invoices/${retained.id}`,
+        "GET",
+        undefined,
+        recipient.cookie,
+      ),
+    ),
+  );
+  assert.equal(retainedInvoice.status, "settled");
+  assert.equal(
+    (
+      await call(
+        `/api/deliverables/${root}/download`,
+        "GET",
+        undefined,
+        recipient.cookie,
+      )
+    ).status,
+    404,
+  );
   process.stdout.write(
-    "Installed invoices: concurrent numbers, reviewed drafts/freeze, identity/association denial, exact settlement, all versions/any-linked/no-links/new-upload/relock/replay, terminal deletion, defaults and role pages passed.\n",
+    "Installed invoices: concurrent numbers, reviewed drafts/freeze, identity/association denial, exact settlement, all versions/any-linked/no-links/new-upload/relock/replay, terminal deletion, defaults, retained deleted-project settlement and role pages passed.\n",
   );
 } finally {
   await getSql().end({ timeout: 5 });

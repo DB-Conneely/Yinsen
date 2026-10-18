@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { getSql } from "../src/lib/db/client";
@@ -23,8 +23,9 @@ import {
   uploadDeliverable,
   releaseDeliverable,
   downloadDeliverable,
+  writeDeliverableRelease,
 } from "../src/lib/deliverables/service";
-import type { ProjectActor } from "../src/lib/projects/access";
+import { lockProject, type ProjectActor } from "../src/lib/projects/access";
 import { POST } from "../src/app/api/milestones/[id]/deliverables/route";
 import { PATCH } from "../src/app/api/deliverables/[id]/route";
 import { GET } from "../src/app/api/deliverables/[id]/download/route";
@@ -251,7 +252,38 @@ describe("wired milestone deliverables and private per-version release", () => {
       statusCode: 404,
     });
   });
+  it("restricts the shared release writer to an operator and the exact locked project file", async () => {
+    const file = await send();
+    await getSql().begin(async (sql) => {
+      await lockProject(sql, projectId, operator);
+      await expect(
+        writeDeliverableRelease(sql, projectId, file.id, true, client),
+      ).rejects.toMatchObject({ statusCode: 403 });
+      await expect(
+        writeDeliverableRelease(sql, projectId, randomUUID(), true, operator),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+    const otherProject = await milestoneProject(otherMilestone);
+    await getSql().begin(async (sql) => {
+      await lockProject(sql, otherProject, operator);
+      await expect(
+        writeDeliverableRelease(sql, otherProject, file.id, true, operator),
+      ).rejects.toMatchObject({ statusCode: 404 });
+    });
+    expect(
+      (await getSql()`select released from deliverables where id=${file.id}`)[0]
+        ?.released,
+    ).toBe(false);
+  });
   it("rolls back a real post-Put SQL failure, removes only that private object and retries once", async () => {
+    const sentinel = await send();
+    const stored = await getSql()<
+      { key: string }[]
+    >`select storage_key as key from deliverables where id=${sentinel.id}`;
+    if (!stored[0]) throw new TypeError("Missing stored sentinel fixture.");
+    const sentinelPath = `${process.env.STORAGE_LOCAL_PATH ?? ""}/${stored[0].key}`;
+    const sentinelBytes = await readFile(sentinelPath);
+    expect(sentinelBytes.toString()).toBe(bytes);
     const owner = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
       max: 1,
       ssl: false,
@@ -264,6 +296,12 @@ describe("wired milestone deliverables and private per-version release", () => {
       expect(
         await getSql()`select id from deliverables where id=${id}`,
       ).toHaveLength(0);
+      expect(
+        await readdir(
+          `${process.env.STORAGE_LOCAL_PATH ?? ""}/deliverables/${id}`,
+        ),
+      ).toEqual([]);
+      expect(await readFile(sentinelPath)).toEqual(sentinelBytes);
     } finally {
       await owner`grant insert on deliverables to yinsen_runtime`;
       await owner.end();

@@ -1,15 +1,15 @@
 "use client";
 import type { ReactElement } from "react";
 export default function InvoiceError({
-  reset,
+  retry,
 }: {
-  reset: () => void;
+  retry: () => void;
 }): ReactElement {
   return (
     <div className="card">
       <h1>Invoices are unavailable</h1>
       <p>Check your connection and retry, or contact the operator.</p>
-      <button onClick={reset}>Retry</button>
+      <button onClick={retry}>Retry</button>
     </div>
   );
 }

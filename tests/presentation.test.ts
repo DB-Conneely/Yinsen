@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { Children, createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DashboardNavigation } from "../src/components/dashboard-nav";
@@ -6,6 +6,8 @@ import { MilestoneFiles } from "../src/components/milestone-files";
 import { InvoiceActions } from "../src/components/invoice-actions";
 import { InvoiceForm } from "../src/components/invoice-form";
 import type { InvoiceDetail } from "../src/lib/invoices/queries";
+import OperatorInvoiceError from "../src/app/dashboard/invoices/error";
+import ClientInvoiceError from "../src/app/portal/(protected)/invoices/error";
 
 const route = vi.hoisted(() => ({ pathname: "/dashboard/clients" }));
 const invoice: InvoiceDetail = {
@@ -49,6 +51,23 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("the installed shared workspace navigation", () => {
+  it("uses the framework server-data retry callback on both invoice error pages", () => {
+    for (const ErrorPage of [OperatorInvoiceError, ClientInvoiceError]) {
+      const retry = vi.fn();
+      const tree = createElement(ErrorPage, { retry });
+      const rendered = ErrorPage(tree.props);
+      expect(isValidElement<{ children: ReactNode }>(rendered)).toBe(true);
+      if (!isValidElement<{ children: ReactNode }>(rendered))
+        throw new TypeError("Expected the invoice error page.");
+      for (const child of Children.toArray(rendered.props.children))
+        if (
+          isValidElement<{ onClick?: () => void }>(child) &&
+          child.type === "button"
+        )
+          child.props.onClick?.();
+      expect(retry).toHaveBeenCalledOnce();
+    }
+  });
   it("offers a client link only after the invoice was actually issued", () => {
     const portalUrl = "http://localhost:3051/portal/invoices/" + invoice.id;
     expect(
@@ -206,5 +225,47 @@ describe("the installed shared workspace navigation", () => {
     expect(operator).toContain("Relock");
     expect(operator).toContain("Release");
     expect(operator).toContain('href="/api/deliverables/next/download"');
+  });
+  it("matches distinct same-name root choices to their file cards and preserves their UUID values", () => {
+    const root = {
+      id: "00000000-0000-4000-8000-000000000031",
+      milestoneId: "milestone",
+      parentDeliverableId: null,
+      version: 1,
+      filename: "same-name.txt",
+      size: 45,
+      released: false,
+      uploadedAt: "2026-10-18T00:00:00Z",
+    };
+    const html = renderToStaticMarkup(
+      createElement(MilestoneFiles, {
+        milestoneId: "milestone",
+        milestoneName: "Design",
+        files: [
+          root,
+          { ...root, id: "00000000-0000-4000-8000-000000000032" },
+          {
+            ...root,
+            id: "00000000-0000-4000-8000-000000000033",
+            parentDeliverableId: root.id,
+            version: 2,
+            filename: "updated-name.txt",
+          },
+        ],
+        operator: true,
+        maxBytes: 1048576,
+      }),
+    );
+    expect(html).toContain("<strong>File 1 · updated-name.txt</strong>");
+    expect(html).toContain("<strong>File 2 · same-name.txt</strong>");
+    expect(html).toContain(
+      '<option value="00000000-0000-4000-8000-000000000031">File 1 · same-name.txt</option>',
+    );
+    expect(html).toContain(
+      '<option value="00000000-0000-4000-8000-000000000032">File 2 · same-name.txt</option>',
+    );
+    expect(html).not.toContain(
+      '<option value="00000000-0000-4000-8000-000000000033">',
+    );
   });
 });

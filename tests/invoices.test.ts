@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getSql } from "../src/lib/db/client";
 import { completeSetup, isSetupComplete } from "../src/lib/setup/service";
 import { loginOperator } from "../src/lib/auth/login";
 import { saveClient } from "../src/lib/clients/service";
-import { saveProject } from "../src/lib/projects/service";
+import { saveProject, deleteProject } from "../src/lib/projects/service";
 import { getProject } from "../src/lib/projects/queries";
 import {
   createMilestone,
@@ -14,6 +15,7 @@ import { readDeliverableUpload } from "../src/lib/storage/upload";
 import {
   uploadDeliverable,
   releaseDeliverable,
+  downloadDeliverable,
 } from "../src/lib/deliverables/service";
 import {
   invoiceFields,
@@ -56,7 +58,7 @@ const fields = (): ReturnType<typeof invoiceFields.parse> =>
   });
 const create = (): ReturnType<typeof createInvoice> =>
   createInvoice({ ...fields(), requestId: randomUUID() }, actor);
-async function upload(parent?: string): Promise<string> {
+async function upload(parent?: string, target = milestoneId): Promise<string> {
   const body = new FormData();
   body.set("requestId", randomUUID());
   if (parent) body.set("parentDeliverableId", parent);
@@ -71,12 +73,19 @@ async function upload(parent?: string): Promise<string> {
     body,
   });
   return (
-    await uploadDeliverable(
-      milestoneId,
-      await readDeliverableUpload(request),
-      actor,
-    )
+    await uploadDeliverable(target, await readDeliverableUpload(request), actor)
   ).id;
+}
+
+async function waitForInvoiceLock(holderPid: number): Promise<void> {
+  const deadline = Date.now() + 4000;
+  // Observe the single held job, rather than retrying any domain operation.
+  while (Date.now() < deadline) {
+    const waiting =
+      await getSql()`select pid from pg_stat_activity where ${holderPid}=any(pg_blocking_pids(pid))`;
+    if (waiting.length) return;
+  }
+  throw new TypeError("The overdue job did not reach the held invoice lock.");
 }
 beforeAll(async () => {
   if (!(await isSetupComplete()))
@@ -442,6 +451,56 @@ describe("the single full-payment release transition", () => {
       code: "MONEY_RECEIVED",
     });
   });
+  it("records full money and releases linked versions after normal project soft deletion", async () => {
+    const project = await saveProject(
+      {
+        name: "Deleted invoice parent",
+        currency: "GBP",
+        clientIds: [client.id],
+      },
+      actor,
+    );
+    const milestone =
+      (await createMilestone(project.id, { name: "Retained work" }, actor))
+        .milestones[0]?.id ?? "";
+    const file = await upload(undefined, milestone);
+    const draft = await createInvoice(
+      {
+        ...fields(),
+        projectId: project.id,
+        milestoneIds: [milestone],
+        requestId: randomUUID(),
+      },
+      actor,
+    );
+    const sent = await sendInvoice(
+      draft.id,
+      { expectedRevision: draft.revision },
+      actor,
+    );
+    await deleteProject(project.id, actor);
+    const settled = await settleInvoice(
+      sent.id,
+      {
+        amountReceived: sent.amount,
+        paymentMethod: "bank_transfer",
+        reference: "Retained project invoice receipt",
+      },
+      actor,
+    );
+    expect(settled.status).toBe("settled");
+    expect((await getInvoice(sent.id, client)).status).toBe("settled");
+    expect(
+      (await getSql()`select released from deliverables where id=${file}`)[0]
+        ?.released,
+    ).toBe(true);
+    await expect(getProject(project.id, actor)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+    await expect(downloadDeliverable(file, client)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
   it("marks due sent invoices once and excludes drafts and terminal records", async () => {
     const draft = await createInvoice(
       { ...fields(), dueDate: "2000-01-01", requestId: randomUUID() },
@@ -460,9 +519,154 @@ describe("the single full-payment release transition", () => {
       ).length,
     ).toBe(1);
   });
+  it("continues overdue work after a later candidate is deleted while the job is held", async () => {
+    const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
+    for (const id of ids) {
+      const draft = await createInvoice(
+        {
+          ...fields(),
+          projectId: null,
+          milestoneIds: [],
+          dueDate: "2000-01-01",
+          requestId: id,
+        },
+        actor,
+      );
+      await sendInvoice(id, { expectedRevision: draft.revision }, actor);
+    }
+    const [first = "", deleted = "", last = ""] = ids;
+    let release = (): void => undefined;
+    let ready = (_pid: number): void => undefined;
+    let failReady = (_error: unknown): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const locked = new Promise<number>((resolve, reject) => {
+      ready = resolve;
+      failReady = reject;
+    });
+    const holder = getSql()
+      .begin(async (sql) => {
+        await sql`select pg_advisory_xact_lock(hashtextextended(${first},32))`;
+        const rows = await sql<
+          { pid: number }[]
+        >`select pg_backend_pid() as pid`;
+        ready(rows[0]?.pid ?? 0);
+        await held;
+      })
+      .then(
+        () => ({ error: undefined }),
+        (error: unknown) => {
+          failReady(error);
+          return { error };
+        },
+      );
+    const pid = await locked;
+    const job = markOverdueInvoices().then(
+      () => ({ error: undefined }),
+      (error: unknown) => ({ error }),
+    );
+    let holderFailure: unknown;
+    try {
+      await waitForInvoiceLock(pid);
+      await cancelInvoice(deleted, actor, true);
+    } finally {
+      release();
+      const [finished] = await Promise.all([holder, job]);
+      holderFailure = finished.error;
+    }
+    if (holderFailure !== undefined)
+      throw holderFailure instanceof Error
+        ? holderFailure
+        : new Error("Invoice lock holder failed", { cause: holderFailure });
+    const result = await job;
+    if (result.error !== undefined)
+      throw result.error instanceof Error
+        ? result.error
+        : new Error("Overdue job failed", { cause: result.error });
+    expect((await getInvoice(first, actor)).status).toBe("overdue");
+    expect((await getInvoice(last, actor)).status).toBe("overdue");
+    await expect(getInvoice(deleted, actor)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
 });
 
 describe("configured invoice email failure and exact retry", () => {
+  it.each(["unchanged", "sender", "origin"])(
+    "retries accepted email after real SQL rollback with %s native payload",
+    async (change) => {
+      vi.stubEnv("RESEND_API_KEY", "re_synthetic");
+      vi.stubEnv("EMAIL_FROM_ADDRESS", "billing@example.test");
+      const owner = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
+        max: 1,
+        ssl: false,
+      });
+      const accepted = new Map<string, { body: string; id: string }>();
+      const requests: { key: string; body: string }[] = [];
+      const draft = await create();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: unknown, init?: RequestInit) => {
+          const key = new Headers(init?.headers).get("Idempotency-Key") ?? "";
+          const body = typeof init?.body === "string" ? init.body : "";
+          expect(key).not.toBe("");
+          expect(body).not.toBe("");
+          requests.push({ key, body });
+          const previous = accepted.get(key);
+          if (previous && previous.body !== body)
+            return Response.json(
+              { name: "invalid_idempotent_request" },
+              { status: 409 },
+            );
+          const message = previous ?? { body, id: randomUUID() };
+          accepted.set(key, message);
+          if (requests.length === 1)
+            await owner`revoke insert on activity_events from yinsen_runtime`;
+          return Response.json({ id: message.id });
+        }),
+      );
+      try {
+        try {
+          await expect(
+            sendInvoice(draft.id, { expectedRevision: draft.revision }, actor),
+          ).rejects.toMatchObject({ code: "42501" });
+        } finally {
+          await owner`grant insert on activity_events to yinsen_runtime`;
+        }
+        const failed = await getInvoice(draft.id, actor);
+        expect(failed.status).toBe("draft");
+        expect(failed.revision).toBe(draft.revision);
+        if (change === "sender")
+          vi.stubEnv("EMAIL_FROM_ADDRESS", "corrected@example.test");
+        if (change === "origin")
+          vi.stubEnv("APP_ORIGIN", "http://localhost:3999");
+        const sent = await sendInvoice(
+          draft.id,
+          { expectedRevision: failed.revision },
+          actor,
+        );
+        expect(sent.status).toBe("sent");
+        expect(requests).toHaveLength(2);
+        expect(requests[0]?.key === requests[1]?.key).toBe(
+          change === "unchanged",
+        );
+        expect(requests[0]?.body === requests[1]?.body).toBe(
+          change === "unchanged",
+        );
+        const saved =
+          await getSql()`select email_id from invoices where id=${draft.id}`;
+        expect(saved[0]?.email_id).toBe(
+          accepted.get(requests[1]?.key ?? "")?.id,
+        );
+      } finally {
+        await owner`grant insert on activity_events to yinsen_runtime`;
+        await owner.end();
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
   it("keeps a provider failure draft, submits escaped branded terms and freezes after success", async () => {
     const key = process.env.RESEND_API_KEY,
       from = process.env.EMAIL_FROM_ADDRESS;

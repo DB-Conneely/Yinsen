@@ -240,6 +240,11 @@ export async function payInvoice(
         "CHECKOUT_UNAVAILABLE",
         "Checkout is unavailable. Please retry.",
       );
+    if (["failed", "expired"].includes(current.state))
+      return {
+        error:
+          "This Checkout attempt closed while payment was opening. Retry Pay to recover the current attempt.",
+      };
     return obtain(sql, current);
   });
   if ("error" in result)

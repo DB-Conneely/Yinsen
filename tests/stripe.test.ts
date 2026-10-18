@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createServer, connect, type Socket } from "node:net";
+import { once } from "node:events";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Stripe from "stripe";
 import { z } from "zod";
@@ -6,7 +9,7 @@ import { getSql } from "../src/lib/db/client";
 import { completeSetup, isSetupComplete } from "../src/lib/setup/service";
 import { loginOperator } from "../src/lib/auth/login";
 import { saveClient } from "../src/lib/clients/service";
-import { saveProject } from "../src/lib/projects/service";
+import { saveProject, deleteProject } from "../src/lib/projects/service";
 import { createMilestone } from "../src/lib/milestones/service";
 import {
   createInvoice,
@@ -64,7 +67,8 @@ let projectId: string, milestoneId: string, fileId: string;
 const sessions = new Map<string, Record<string, unknown>>();
 const keys = new Map<string, string>();
 let failCreate = false,
-  failExpire = false;
+  failExpire = false,
+  rejectNextCreate = false;
 let creates = 0;
 const signing = "whsec_fixture";
 const actualStripeClient = provider.stripeClient;
@@ -80,6 +84,18 @@ const fakeFetch: typeof fetch = async (input, init) => {
   if (url.pathname === "/v1/account")
     return Response.json({ id: "acct_fixture", object: "account" });
   if (url.pathname === "/v1/checkout/sessions") {
+    if (rejectNextCreate) {
+      rejectNextCreate = false;
+      return Response.json(
+        {
+          error: {
+            type: "invalid_request_error",
+            message: "Configuration unavailable",
+          },
+        },
+        { status: 400 },
+      );
+    }
     const key = new Headers(init?.headers).get("idempotency-key") ?? "";
     const existing = keys.get(key);
     if (existing) return Response.json(sessions.get(existing));
@@ -181,6 +197,109 @@ function paid(session: Stripe.Checkout.Session): Stripe.Checkout.Session {
     status: "complete",
     payment_status: "paid",
     payment_intent: `pi_${randomUUID().replaceAll("-", "")}`,
+  };
+}
+
+type ReservationHold = {
+  sockets: Set<Socket>;
+  armed: boolean;
+  observed: () => void;
+  release: () => void;
+};
+function postgresFrames(
+  input: Buffer,
+  consume: (frame: Buffer) => void,
+): Buffer {
+  let pending = input;
+  while (pending.length >= 5) {
+    const length = pending.readInt32BE(1) + 1;
+    if (length < 5 || length > 20000000 || pending.length < length) break;
+    consume(pending.subarray(0, length));
+    pending = pending.subarray(length);
+  }
+  return pending;
+}
+function closeRelay(clientSocket: Socket, upstream: Socket): void {
+  const close = (): void => {
+    clientSocket.destroy();
+    upstream.destroy();
+  };
+  clientSocket.on("error", close);
+  upstream.on("error", close);
+  clientSocket.on("close", close);
+  upstream.on("close", close);
+}
+function relayReservation(clientSocket: Socket, hold: ReservationHold): void {
+  const target = new URL(process.env.DATABASE_URL ?? "invalid");
+  const upstream = connect(Number(target.port), target.hostname);
+  clientSocket.setNoDelay(true);
+  upstream.setNoDelay(true);
+  hold.sockets.add(clientSocket).add(upstream);
+  let pending: Buffer = Buffer.alloc(0);
+  let wire = "",
+    blocked = false;
+  const replies: Buffer[] = [];
+  clientSocket.on("data", (chunk: Buffer) => {
+    wire = (wire + chunk.toString("utf8")).slice(-32768);
+    upstream.write(chunk);
+  });
+  upstream.on("data", (chunk: Buffer) => {
+    pending = postgresFrames(Buffer.concat([pending, chunk]), (frame) => {
+      if (
+        hold.armed &&
+        wire.includes("insert into checkout_attempts") &&
+        frame[0] === 67 &&
+        frame.subarray(5).toString() === "COMMIT\0"
+      ) {
+        hold.armed = false;
+        blocked = true;
+        hold.release = (): void => {
+          blocked = false;
+          for (const reply of replies.splice(0)) clientSocket.write(reply);
+        };
+        hold.observed();
+      }
+      if (blocked) replies.push(Buffer.from(frame));
+      else clientSocket.write(frame);
+    });
+  });
+  closeRelay(clientSocket, upstream);
+}
+async function holdCheckoutReservation(): Promise<{
+  url: string;
+  observed: Promise<void>;
+  release: () => void;
+  close: () => Promise<void>;
+}> {
+  let observed = (): void => undefined;
+  const signal = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const hold: ReservationHold = {
+    sockets: new Set(),
+    armed: true,
+    observed,
+    release: () => undefined,
+  };
+  const server = createServer((socket) => relayReservation(socket, hold));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new TypeError("Expected loopback TCP listener");
+  const target = new URL(process.env.DATABASE_URL ?? "invalid");
+  target.hostname = "127.0.0.1";
+  target.port = String(address.port);
+  return {
+    url: target.toString(),
+    observed: signal,
+    release: () => hold.release(),
+    close: async () => {
+      for (const socket of hold.sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    },
   };
 }
 beforeAll(async () => {
@@ -338,6 +457,57 @@ describe("direct Stripe invoice ownership", () => {
     );
     await payInvoice(aged, client);
     expect(creates).toBe(agedBefore);
+  });
+  it("does not recreate a closed reservation after a competing Pay replaced it", async () => {
+    const id = await invoice("GBP", false);
+    const original = getSql();
+    const transport = await holdCheckoutReservation();
+    const proxied = postgres(transport.url, {
+      ssl: false,
+      max: 5,
+      connect_timeout: 5,
+      connection: { statement_timeout: 5000 },
+      onnotice: () => undefined,
+    });
+    globalThis.yinsenSql = proxied;
+    const delayed = payInvoice(id, client).then(
+      (value) => ({ value, error: null }),
+      (error: unknown) => ({ value: null, error }),
+    );
+    try {
+      await Promise.race([
+        transport.observed,
+        once(AbortSignal.timeout(5000), "abort").then(() => {
+          throw new TypeError("Reservation COMMIT was not observed");
+        }),
+      ]);
+      expect((await invoiceAttempts(original, id))[0]?.state).toBe("uncertain");
+      rejectNextCreate = true;
+      await expect(payInvoice(id, client)).rejects.toMatchObject({
+        code: "CHECKOUT_PENDING",
+      });
+      expect((await invoiceAttempts(original, id))[0]?.state).toBe("failed");
+      const replacement = await payInvoice(id, client);
+      const before = creates;
+      transport.release();
+      const resumed = await delayed;
+      expect(creates).toBe(before);
+      expect(resumed.error).toMatchObject({ code: "CHECKOUT_PENDING" });
+      expect(resumed.value).toBeNull();
+      expect((await payInvoice(id, client)).url).toBe(replacement.url);
+      expect(
+        (await invoiceAttempts(original, id)).filter(
+          (attempt) => attempt.state === "open",
+        ),
+      ).toHaveLength(1);
+    } finally {
+      rejectNextCreate = false;
+      transport.release();
+      await delayed;
+      await proxied.end({ timeout: 5 });
+      globalThis.yinsenSql = original;
+      await transport.close();
+    }
   });
   it("rejects forged signatures and grants nothing for unpaid/unsupported events", async () => {
     await expect(handleStripeWebhook("{}", "forged")).rejects.toMatchObject({
@@ -536,6 +706,25 @@ describe("direct Stripe invoice ownership", () => {
       await getSql()`select p.exception from stripe_payments p join checkout_attempts a on a.id=p.attempt_id where a.invoice_id=${id}`;
     expect(records).toHaveLength(1);
     expect(Boolean(records[0]?.exception)).toBe(status === "settled");
+  });
+  it("records signed payment and releases linked files after project deletion", async () => {
+    const id = await invoice();
+    const session = paid(await sessionFor(id));
+    await releaseDeliverable(fileId, { released: false }, actor);
+    await deleteProject(projectId, actor);
+    await deliver(session);
+    expect((await getInvoice(id, client)).status).toBe("paid");
+    expect(
+      (await getSql()`select released from deliverables where id=${fileId}`)[0]
+        ?.released,
+    ).toBe(true);
+    expect(
+      (await getSql()`select deleted_at from projects where id=${projectId}`)[0]
+        ?.deleted_at,
+    ).not.toBeNull();
+    expect(
+      await getSql()`select 1 from stripe_payments where session_id=${session.id}`,
+    ).toHaveLength(1);
   });
   it("retains the no-provider manual invoice path", async () => {
     vi.stubEnv("STRIPE_SECRET_KEY", "");
