@@ -9,6 +9,7 @@ import { loginOperator } from "../src/lib/auth/login";
 import { getBranding } from "../src/lib/settings";
 import { saveClient, archiveClient } from "../src/lib/clients/service";
 import { saveProject, transitionProject } from "../src/lib/projects/service";
+import type { ProjectDetail } from "../src/lib/projects/queries";
 import {
   createInvoice,
   sendInvoice,
@@ -34,7 +35,8 @@ import AnalyticsLoading from "../src/app/dashboard/analytics/loading";
 import DashboardLoading from "../src/app/dashboard/loading";
 import { issueMagicLink, redeemMagicLink } from "../src/lib/auth/client";
 import { subscribeProjects } from "../src/lib/events/hub";
-import { messageSummary } from "../src/lib/messages/queries";
+import { listMessages, messageSummary } from "../src/lib/messages/queries";
+import { markMessagesRead } from "../src/lib/messages/service";
 import {
   DashboardView,
   AnalyticsView,
@@ -85,6 +87,75 @@ async function invoice(
   ids.push(draft.id);
   await sendInvoice(draft.id, { expectedRevision: draft.revision }, actor);
   return draft.id;
+}
+
+async function activeAnalyticsProject(name: string): Promise<ProjectDetail> {
+  let project = await saveProject(
+    { name, currency: "GBP", clientIds: [clientId] },
+    actor,
+  );
+  project = await transitionProject(
+    project.id,
+    { status: "pending_lockin" },
+    actor,
+  );
+  return transitionProject(
+    project.id,
+    { status: "active", expectedRevision: project.lockRevision },
+    { id: clientId, role: "client" },
+  );
+}
+
+async function disputedAnalyticsProject(): Promise<ProjectDetail> {
+  let project = await activeAnalyticsProject("Unresolved analytics changes");
+  project = await transitionProject(
+    project.id,
+    {
+      status: "pending_approval",
+      expectedRevision: project.completionRevision,
+    },
+    actor,
+  );
+  project = await transitionProject(
+    project.id,
+    {
+      status: "active",
+      expectedRevision: project.completionRevision,
+      reason: "Please revise the final project handover.",
+    },
+    { id: clientId, role: "client" },
+  );
+  const conversation = { kind: "project" as const, id: project.id };
+  const messages = await listMessages(conversation, actor);
+  await markMessagesRead(
+    conversation,
+    { ids: messages.messages.map((message) => message.id) },
+    actor,
+  );
+  return project;
+}
+
+function attentionMarkup(snapshot: AnalyticsSnapshot): string {
+  const html = renderToStaticMarkup(
+    createElement(DashboardView, { snapshot, name: "Morgan" }),
+  );
+  return html.split('id="needs-attention"')[1]?.split("</section>")[0] ?? "";
+}
+
+function expectChangeRequest(
+  snapshot: AnalyticsSnapshot,
+  project: ProjectDetail,
+): void {
+  expect(
+    snapshot.overview.projects.find((p) => p.id === project.id),
+  ).toMatchObject({ status: project.status, disputed: true });
+  expect(
+    snapshot.overview.unread.conversations.find((c) => c.id === project.id)
+      ?.unread ?? 0,
+  ).toBe(0);
+  const attention = attentionMarkup(snapshot);
+  expect(attention).toContain(`/dashboard/projects/${project.id}#messages`);
+  expect(attention).toContain("Changes requested");
 }
 
 beforeAll(async () => {
@@ -278,6 +349,52 @@ describe("operator analytics over actual financial and project facts", () => {
     } finally {
       unsubscribe();
     }
+  });
+  it("retains read change requests through pause and resume until resubmission", async () => {
+    let project = await disputedAnalyticsProject();
+    const initial = await readAnalytics(actor, "all");
+    expect(attentionMarkup(initial)).toContain(project.name);
+    for (const status of ["paused", "active"]) {
+      project = await transitionProject(project.id, { status }, actor);
+      const snapshot = await readAnalytics(actor, "all");
+      expectChangeRequest(snapshot, project);
+      expect(snapshot.overview.activeProjects).toBe(
+        initial.overview.activeProjects - (status === "paused" ? 1 : 0),
+      );
+    }
+    await transitionProject(
+      project.id,
+      {
+        status: "pending_approval",
+        expectedRevision: project.completionRevision,
+      },
+      actor,
+    );
+    const resubmitted = await readAnalytics(actor, "all");
+    expect(
+      resubmitted.overview.projects.find((p) => p.id === project.id),
+    ).toMatchObject({ status: "pending_approval", disputed: false });
+    expect(attentionMarkup(resubmitted)).not.toContain(
+      `/dashboard/projects/${project.id}#messages`,
+    );
+    expect(attentionMarkup(resubmitted)).toContain(
+      "Awaiting completion review",
+    );
+  });
+  it("does not turn an ordinary paused project into a pending client decision", async () => {
+    const project = await activeAnalyticsProject(
+      "Ordinary paused analytics work",
+    );
+    await transitionProject(project.id, { status: "paused" }, actor);
+    const snapshot = await readAnalytics(actor, "all");
+    expect(
+      snapshot.overview.projects.find((p) => p.id === project.id),
+    ).toMatchObject({ status: "paused", disputed: false });
+    expect(attentionMarkup(snapshot)).not.toContain(project.name);
+    const html = renderToStaticMarkup(
+      createElement(DashboardView, { snapshot, name: "Morgan" }),
+    );
+    expect(html).not.toContain(`aria-label="${project.name}:`);
   });
   it("keeps totals and charts coherent while a real invoice transitions concurrently", async () => {
     const id = await invoice("JPY", 76543);

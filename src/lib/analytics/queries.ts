@@ -193,7 +193,7 @@ async function overview(
     (select count(*)::int from milestones m where m.project_id=p.id) as milestones,
     (select count(*)::int from milestones m where m.project_id=p.id and m.status='approved') as approved,
     coalesce((select event_type='project.disputed' from project_activity where project_id=p.id and event_type in ('project.disputed','project.submitted_for_approval','project.accepted') order by created_at desc,id desc limit 1),false) as disputed
-    from projects p where p.deleted_at is null and p.status in ('active','pending_lockin','pending_approval') order by p.due_date nulls last,p.name,p.id`;
+    from projects p where p.deleted_at is null and p.status in ('active','paused','pending_lockin','pending_approval') order by p.due_date nulls last,p.name,p.id`;
   const overdue = await sql<
     AttentionInvoice[]
   >`select id,invoice_number as number,recipient_name as name,currency,coalesce(total_override,amount)::text as amount,

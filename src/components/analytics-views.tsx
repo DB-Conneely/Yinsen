@@ -319,7 +319,10 @@ function projectAttention(
 ): AttentionItem[] {
   return s.overview.projects
     .filter((p) =>
-      disputed ? p.disputed : !p.disputed && p.status !== "active",
+      disputed
+        ? p.disputed
+        : !p.disputed &&
+          (p.status === "pending_lockin" || p.status === "pending_approval"),
     )
     .map((p) => ({
       id: p.id,
