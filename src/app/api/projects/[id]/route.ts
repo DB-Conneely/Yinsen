@@ -29,7 +29,7 @@ export async function PATCH(
     const actor = await projectActor(requestToken(request));
     operatorOnly(actor);
     const data = await readJson(request);
-    const status = z.object({ status: z.string() }).strict().safeParse(data);
+    const status = z.object({ status: z.string() }).safeParse(data);
     const id = (await context.params).id;
     return status.success
       ? transitionProject(id, data, actor)

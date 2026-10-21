@@ -1759,6 +1759,33 @@ dd {
 .project-banner {
   border-left: 4px solid var(--accent-ink);
 }
+
+.project-lifecycle {
+  border-inline-start: 3px solid var(--accent-ink);
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: var(--space-3);
+}
+.project-lifecycle h2,
+.project-lifecycle h3,
+.project-lifecycle p {
+  margin: 0;
+}
+.project-lifecycle h2 + p,
+.project-lifecycle h3 + p {
+  margin-top: 0.4rem;
+}
+.project-lifecycle .confirmation {
+  display: grid;
+  gap: 0.85rem;
+}
+.project-lifecycle [role="status"]:empty {
+  display: none;
+}
+.project-management {
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
 .message-thread {
   margin-top: 1.5rem;
   padding: 0;

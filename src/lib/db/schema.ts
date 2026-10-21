@@ -175,7 +175,15 @@ export const projects = pgTable(
     name: text().notNull(),
     description: text().notNull().default(""),
     status: text()
-      .$type<"draft" | "pending_lockin" | "active" | "paused">()
+      .$type<
+        | "draft"
+        | "pending_lockin"
+        | "active"
+        | "paused"
+        | "pending_approval"
+        | "completed"
+        | "archived"
+      >()
       .notNull()
       .default("draft"),
     budget: integer(),
@@ -197,7 +205,7 @@ export const projects = pgTable(
   (table) => [
     check(
       "projects_status",
-      sql`${table.status} in ('draft','pending_lockin','active','paused')`,
+      sql`${table.status} in ('draft','pending_lockin','active','paused','pending_approval','completed','archived')`,
     ),
     check(
       "projects_budget",

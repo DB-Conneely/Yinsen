@@ -6,6 +6,9 @@ export const projectStatus = z.enum([
   "pending_lockin",
   "active",
   "paused",
+  "pending_approval",
+  "completed",
+  "archived",
 ]);
 const date = z.iso
   .date()
@@ -13,6 +16,10 @@ const date = z.iso
   .nullable();
 export const reviewedVersion = z
   .object({ expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) })
+  .strict();
+export const completionDecision = reviewedVersion;
+export const disputeDecision = reviewedVersion
+  .extend({ reason: z.string().trim().min(10).max(4000) })
   .strict();
 export const projectFields = z
   .object({

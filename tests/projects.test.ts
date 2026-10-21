@@ -58,6 +58,12 @@ import {
 import { POST as approvePost } from "../src/app/api/milestones/[id]/approve/route";
 import { GET as eventGet } from "../src/app/api/events/route";
 import { sendMessage } from "../src/lib/messages/service";
+import { listMessages, messageSummary } from "../src/lib/messages/queries";
+import { POST as submitPost } from "../src/app/api/projects/[id]/submit-for-approval/route";
+import { POST as acceptPost } from "../src/app/api/projects/[id]/accept/route";
+import { POST as disputePost } from "../src/app/api/projects/[id]/dispute/route";
+import { POST as archivePost } from "../src/app/api/projects/[id]/archive/route";
+import postgres from "postgres";
 
 let operator: ProjectActor;
 let primary: ProjectActor;
@@ -100,6 +106,23 @@ async function editProject(
     { ...input, expectedRevision: current.editRevision },
     operator,
     id,
+  );
+}
+
+async function activeProject(): Promise<ProjectDetail> {
+  const created = await saveProject(
+    { ...fields, clientIds: [primary.id, member.id] },
+    operator,
+  );
+  const pending = await transitionProject(
+    created.id,
+    { status: "pending_lockin" },
+    operator,
+  );
+  return transitionProject(
+    created.id,
+    { status: "active", expectedRevision: pending.lockRevision },
+    primary,
   );
 }
 
@@ -147,7 +170,8 @@ afterAll(async () => {
 describe("installed project and milestone writers on real PostgreSQL", () => {
   it("validates identifiers, amounts, dates, duplicates and known statuses", async () => {
     expect(resourceId.safeParse("foreign").success).toBe(false);
-    expect(projectStatus.safeParse("completed").success).toBe(false);
+    expect(projectStatus.parse("completed")).toBe("completed");
+    expect(projectStatus.safeParse("unknown").success).toBe(false);
     expect(milestoneStatus.parse("review")).toBe("review");
     expect(milestoneFields.safeParse({ name: "" }).success).toBe(false);
     expect(
@@ -493,6 +517,427 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
     expect((await getProject(project.id, operator)).milestones[0]?.name).toBe(
       last.name,
     );
+  });
+  it("completes the primary-only dispute/resubmit/accept/archive path with real thread and scoped notifications", async () => {
+    const initial = await activeProject();
+    const changes: string[][] = [];
+    const unsubscribe = subscribeProjects((change) => {
+      if (change.projectId === initial.id) changes.push(change.clientIds);
+    });
+    try {
+      const submitted = await transitionProject(
+        initial.id,
+        {
+          status: "pending_approval",
+          expectedRevision: initial.completionRevision,
+        },
+        operator,
+      );
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "pending_approval",
+            expectedRevision: initial.completionRevision,
+          },
+          operator,
+        ),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "completed",
+            expectedRevision: submitted.completionRevision,
+          },
+          member,
+        ),
+      ).rejects.toMatchObject({ statusCode: 403 });
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "completed",
+            expectedRevision: submitted.completionRevision,
+          },
+          outsider,
+        ),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "completed",
+            expectedRevision: submitted.completionRevision,
+          },
+          operator,
+        ),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "active",
+            expectedRevision: submitted.completionRevision,
+            reason: "  short  ",
+          },
+          primary,
+        ),
+      ).rejects.toBeDefined();
+      expect(await getProject(initial.id, operator)).toEqual(submitted);
+      const reason = "Please correct the navigation spacing before completion.";
+      const disputed = await transitionProject(
+        initial.id,
+        {
+          status: "active",
+          expectedRevision: submitted.completionRevision,
+          reason,
+        },
+        primary,
+      );
+      expect(disputed.status).toBe("active");
+      for (const actor of [operator, primary, member]) {
+        const thread = await listMessages(
+          { kind: "project", id: initial.id },
+          actor,
+        );
+        expect(thread.messages).toEqual([
+          expect.objectContaining({
+            body: `Completion disputed\n\n${reason}`,
+            senderId: primary.id,
+            senderType: "client",
+          }),
+        ]);
+      }
+      expect(
+        (await messageSummary(operator)).conversations.find(
+          (item) => item.id === initial.id,
+        )?.unread,
+      ).toBe(1);
+      expect(
+        (await messageSummary(outsider)).conversations.some(
+          (item) => item.id === initial.id,
+        ),
+      ).toBe(false);
+      const again = await transitionProject(
+        initial.id,
+        {
+          status: "pending_approval",
+          expectedRevision: disputed.completionRevision,
+        },
+        operator,
+      );
+      expect(again.lockRevision).toBe(submitted.lockRevision);
+      expect(again.completionRevision).not.toBe(submitted.completionRevision);
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "completed",
+            expectedRevision: submitted.completionRevision,
+          },
+          primary,
+        ),
+      ).rejects.toMatchObject({ code: "PROJECT_CHANGED" });
+      const completed = await transitionProject(
+        initial.id,
+        { status: "completed", expectedRevision: again.completionRevision },
+        primary,
+      );
+      expect(completed.status).toBe("completed");
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "archived",
+            expectedRevision: completed.completionRevision,
+          },
+          primary,
+        ),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      const archived = await transitionProject(
+        initial.id,
+        { status: "archived", expectedRevision: completed.completionRevision },
+        operator,
+      );
+      expect(archived.status).toBe("archived");
+      expect(
+        (await listProjects(member, { status: "archived" })).some(
+          (item) => item.id === initial.id,
+        ),
+      ).toBe(true);
+      expect(
+        (await listMessages({ kind: "project", id: initial.id }, member))
+          .messages,
+      ).toHaveLength(1);
+      const history = await getSql()<
+        { event_type: string }[]
+      >`select event_type from project_activity where project_id=${initial.id} and event_type in ('project.submitted_for_approval','project.disputed','project.accepted','project.archived') order by created_at,id`;
+      expect(history.map((row) => row.event_type)).toEqual([
+        "project.submitted_for_approval",
+        "project.disputed",
+        "project.submitted_for_approval",
+        "project.accepted",
+        "project.archived",
+      ]);
+      expect(changes).toHaveLength(5);
+      expect(
+        changes.every(
+          (ids) =>
+            ids.includes(primary.id) &&
+            ids.includes(member.id) &&
+            !ids.includes(outsider.id),
+        ),
+      ).toBe(true);
+      await expect(
+        transitionProject(
+          initial.id,
+          {
+            status: "archived",
+            expectedRevision: completed.completionRevision,
+          },
+          operator,
+        ),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    } finally {
+      unsubscribe();
+    }
+  });
+  it("serializes competing completion decisions and rejects stale current-primary, terms and prior-round reviews", async () => {
+    const initial = await activeProject();
+    const submitted = await transitionProject(
+      initial.id,
+      {
+        status: "pending_approval",
+        expectedRevision: initial.completionRevision,
+      },
+      operator,
+    );
+    const changed = await editProject(
+      {
+        clientIds: [member.id, primary.id],
+        description: "New completion terms",
+      },
+      initial.id,
+    );
+    await expect(
+      transitionProject(
+        initial.id,
+        { status: "completed", expectedRevision: submitted.completionRevision },
+        primary,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    await expect(
+      transitionProject(
+        initial.id,
+        { status: "completed", expectedRevision: submitted.completionRevision },
+        member,
+      ),
+    ).rejects.toMatchObject({ code: "PROJECT_CHANGED" });
+    const results = await Promise.allSettled([
+      transitionProject(
+        initial.id,
+        { status: "completed", expectedRevision: changed.completionRevision },
+        member,
+      ),
+      transitionProject(
+        initial.id,
+        {
+          status: "active",
+          expectedRevision: changed.completionRevision,
+          reason: "Concurrent reason must only persist if this decision wins.",
+        },
+        member,
+      ),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    const after = await getProject(initial.id, operator);
+    const messages = await listMessages(
+      { kind: "project", id: initial.id },
+      operator,
+    );
+    expect(messages.messages).toHaveLength(after.status === "active" ? 1 : 0);
+    const history =
+      await getSql()`select id from project_activity where project_id=${initial.id} and event_type in ('project.disputed','project.accepted')`;
+    expect(history).toHaveLength(1);
+  });
+  it("rolls back dispute state/message/activity and publishes nothing on actual SQL failure, then retries", async () => {
+    const initial = await activeProject();
+    const submitted = await transitionProject(
+      initial.id,
+      {
+        status: "pending_approval",
+        expectedRevision: initial.completionRevision,
+      },
+      operator,
+    );
+    const owner = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
+      max: 1,
+      ssl: false,
+    });
+    const changes: string[] = [];
+    const unsubscribe = subscribeProjects((change) => {
+      if (change.projectId === initial.id) changes.push(change.projectId);
+    });
+    const decision = {
+      status: "active",
+      expectedRevision: submitted.completionRevision,
+      reason: "Please repair the final responsive layout.",
+    };
+    try {
+      await owner`revoke insert on project_activity from yinsen_runtime`;
+      await expect(
+        transitionProject(initial.id, decision, primary),
+      ).rejects.toMatchObject({ code: "42501" });
+      expect(await getProject(initial.id, primary)).toEqual(submitted);
+      expect(
+        (await listMessages({ kind: "project", id: initial.id }, operator))
+          .messages,
+      ).toHaveLength(0);
+      expect(changes).toEqual([]);
+    } finally {
+      await owner`grant insert on project_activity to yinsen_runtime`;
+      await owner.end();
+      unsubscribe();
+    }
+    expect(
+      (await transitionProject(initial.id, decision, primary)).status,
+    ).toBe("active");
+    expect(
+      (await listMessages({ kind: "project", id: initial.id }, operator))
+        .messages,
+    ).toHaveLength(1);
+  });
+  it("exercises all completion route adapters, origin/actor/validation and reviewed PATCH dispatch", async () => {
+    const initial = await activeProject();
+    const session = await redeemMagicLink({
+      token: (await issueMagicLink(primary.id, operator)).token,
+    });
+    const routeContext = context(initial.id);
+    const body = { expectedRevision: initial.completionRevision };
+    expect(
+      (await submitPost(request("/", body, session.token), routeContext))
+        .status,
+    ).toBe(403);
+    expect(
+      (await submitPost(request("/", body, ""), routeContext)).status,
+    ).toBe(401);
+    expect(
+      (
+        await submitPost(
+          new Request(origin, {
+            method: "POST",
+            headers: {
+              origin: "https://foreign.test",
+              cookie: `pylon_session=${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+          }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await PATCH(
+          request("/", { status: "pending_approval", ...body }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(200);
+    const submitted = await getProject(initial.id, primary);
+    expect(
+      (
+        await acceptPost(
+          request("/", { expectedRevision: submitted.completionRevision }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await disputePost(
+          request("/", { expectedRevision: submitted.completionRevision }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await disputePost(
+          request(
+            "/",
+            { expectedRevision: submitted.completionRevision, reason: "short" },
+            session.token,
+          ),
+          routeContext,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await disputePost(
+          request(
+            "/",
+            {
+              expectedRevision: submitted.completionRevision,
+              reason: "A real route dispute reason",
+            },
+            session.token,
+          ),
+          routeContext,
+        )
+      ).status,
+    ).toBe(200);
+    const disputed = await getProject(initial.id, operator);
+    expect(
+      (
+        await submitPost(
+          request("/", { expectedRevision: disputed.completionRevision }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(200);
+    const again = await getProject(initial.id, primary);
+    expect(
+      (
+        await acceptPost(
+          request(
+            "/",
+            { expectedRevision: again.completionRevision },
+            session.token,
+          ),
+          routeContext,
+        )
+      ).status,
+    ).toBe(200);
+    const completed = await getProject(initial.id, operator);
+    expect(
+      (
+        await archivePost(
+          request(
+            "/",
+            { expectedRevision: completed.completionRevision },
+            session.token,
+          ),
+          routeContext,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await archivePost(
+          request("/", { expectedRevision: completed.completionRevision }),
+          routeContext,
+        )
+      ).status,
+    ).toBe(200);
   });
   it("requires review and the primary client for exactly one approval", async () => {
     const milestone = (await getProject(project.id, operator)).milestones[0];

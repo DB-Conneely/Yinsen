@@ -38,6 +38,7 @@ const idFrom = (data: unknown): string =>
 const versions = z.object({
   editRevision: z.string(),
   lockRevision: z.string(),
+  completionRevision: z.string(),
   milestones: z.array(z.object({ id: z.uuid(), reviewRevision: z.string() })),
 });
 async function client(
@@ -123,7 +124,7 @@ try {
     false,
   );
   assert.equal(
-    (await call("/api/projects?status=completed", "GET", undefined, operator))
+    (await call("/api/projects?status=unknown", "GET", undefined, operator))
       .response.status,
     400,
   );
@@ -351,6 +352,241 @@ try {
     (await call(path, "PATCH", { status: "active" }, operator)).response.status,
     200,
   );
+  const activeVersion = versions.parse(
+    (await call(path, "GET", undefined, operator)).data,
+  ).completionRevision;
+  assert.equal(
+    (
+      await call(
+        path + "/submit-for-approval",
+        "POST",
+        { expectedRevision: activeVersion },
+        member.credential,
+      )
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        path + "/submit-for-approval",
+        "POST",
+        { expectedRevision: activeVersion },
+        operator,
+      )
+    ).response.status,
+    200,
+  );
+  assert.equal(
+    (
+      await call(
+        path + "/submit-for-approval",
+        "POST",
+        { expectedRevision: activeVersion },
+        operator,
+      )
+    ).response.status,
+    409,
+  );
+  const firstSubmission = versions.parse(
+    (await call(path, "GET", undefined, primary.credential)).data,
+  ).completionRevision;
+  const firstDecision = { expectedRevision: firstSubmission };
+  assert.equal(
+    (await call(path + "/accept", "POST", firstDecision, member.credential))
+      .response.status,
+    403,
+  );
+  assert.equal(
+    (await call(path + "/accept", "POST", firstDecision, operator)).response
+      .status,
+    403,
+  );
+  assert.equal(
+    (await call(path + "/accept", "POST", firstDecision)).response.status,
+    401,
+  );
+  const foreignDecision = await call(
+    path + "/dispute",
+    "POST",
+    { ...firstDecision, reason: "No unrelated client can decide" },
+    outsider.credential,
+  );
+  const unknownDecision = await call(
+    `/api/projects/${randomUUID()}/dispute`,
+    "POST",
+    { ...firstDecision, reason: "No unrelated client can decide" },
+    outsider.credential,
+  );
+  assert.equal(foreignDecision.response.status, 404);
+  assert.deepEqual(foreignDecision.error, unknownDecision.error);
+  assert.equal(
+    (
+      await call(
+        path + "/dispute",
+        "POST",
+        { ...firstDecision, reason: " short " },
+        primary.credential,
+      )
+    ).response.status,
+    400,
+  );
+  const reason = "Please correct the final mobile spacing before completion.";
+  assert.equal(
+    (
+      await call(
+        path + "/dispute",
+        "POST",
+        { ...firstDecision, reason },
+        primary.credential,
+      )
+    ).response.status,
+    200,
+  );
+  const storedDisputes =
+    await getSql()`select body,sender_id from messages where project_id=${id}`;
+  assert.equal(storedDisputes.length, 1);
+  assert.deepEqual(
+    { ...storedDisputes[0] },
+    { body: `Completion disputed\n\n${reason}`, sender_id: primary.id },
+  );
+  const disputedVersion = versions.parse(
+    (await call(path, "GET", undefined, operator)).data,
+  ).completionRevision;
+  assert.equal(
+    (
+      await call(
+        path + "/submit-for-approval",
+        "POST",
+        { expectedRevision: disputedVersion },
+        operator,
+      )
+    ).response.status,
+    200,
+  );
+  let secondSubmission = versions.parse(
+    (await call(path, "GET", undefined, primary.credential)).data,
+  ).completionRevision;
+  assert.notEqual(secondSubmission, firstSubmission);
+  assert.equal(
+    (await call(path + "/accept", "POST", firstDecision, primary.credential))
+      .response.status,
+    409,
+  );
+  const competing = await Promise.all([
+    call(
+      path + "/accept",
+      "POST",
+      { expectedRevision: secondSubmission },
+      primary.credential,
+    ),
+    call(
+      path + "/dispute",
+      "POST",
+      {
+        expectedRevision: secondSubmission,
+        reason: "Competing completion decision",
+      },
+      primary.credential,
+    ),
+  ]);
+  assert.deepEqual(
+    competing.map((entry) => entry.response.status).sort(),
+    [200, 409],
+  );
+  if (
+    z
+      .object({ status: z.string() })
+      .parse((await call(path, "GET", undefined, operator)).data).status ===
+    "active"
+  ) {
+    const current = versions.parse(
+      (await call(path, "GET", undefined, operator)).data,
+    ).completionRevision;
+    assert.equal(
+      (
+        await call(
+          path + "/submit-for-approval",
+          "POST",
+          { expectedRevision: current },
+          operator,
+        )
+      ).response.status,
+      200,
+    );
+    secondSubmission = versions.parse(
+      (await call(path, "GET", undefined, primary.credential)).data,
+    ).completionRevision;
+    assert.equal(
+      (
+        await call(
+          path + "/accept",
+          "POST",
+          { expectedRevision: secondSubmission },
+          primary.credential,
+        )
+      ).response.status,
+      200,
+    );
+  }
+  const completedVersion = versions.parse(
+    (await call(path, "GET", undefined, operator)).data,
+  ).completionRevision;
+  assert.equal(
+    (
+      await call(
+        path + "/archive",
+        "POST",
+        { expectedRevision: completedVersion },
+        primary.credential,
+      )
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        path + "/archive",
+        "POST",
+        { expectedRevision: completedVersion },
+        operator,
+      )
+    ).response.status,
+    200,
+  );
+  assert.equal(
+    (
+      await call(
+        path + "/archive",
+        "POST",
+        { expectedRevision: completedVersion },
+        operator,
+      )
+    ).response.status,
+    409,
+  );
+  assert.equal(
+    z
+      .object({ status: z.string() })
+      .parse((await call(path, "GET", undefined, member.credential)).data)
+      .status,
+    "archived",
+  );
+  assert.ok(
+    z
+      .array(z.object({ id: z.uuid() }))
+      .parse(
+        (
+          await call(
+            "/api/projects?status=archived",
+            "GET",
+            undefined,
+            primary.credential,
+          )
+        ).data,
+      )
+      .some((item) => item.id === id),
+  );
   const facts =
     await getSql()`select m.description,m.due_date::text,m.status,p.budget,p.status as project_status from milestones m join projects p on p.id=m.project_id where m.id=${m.id}`;
   assert.deepEqual(
@@ -360,7 +596,7 @@ try {
       due_date: "2026-11-01",
       status: "approved",
       budget: 2147483647,
-      project_status: "active",
+      project_status: "archived",
     },
   );
   assert.equal(

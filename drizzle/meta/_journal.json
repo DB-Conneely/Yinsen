@@ -64,6 +64,13 @@
       "when": 1792277173195,
       "tag": "0008_dusty_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792605889986,
+      "tag": "0009_quick_moonstone",
+      "breakpoints": true
     }
   ]
 }

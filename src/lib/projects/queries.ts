@@ -44,6 +44,7 @@ export type Milestone = {
 export type ProjectDetail = Project & {
   editRevision: string;
   lockRevision: string;
+  completionRevision: string;
   members: ProjectMember[];
   milestones: Milestone[];
   activity: {
@@ -79,6 +80,7 @@ function withRevisions(
   members: ProjectMember[],
   milestones: Omit<Milestone, "reviewRevision">[],
   activity: ProjectDetail["activity"],
+  completionFacts: unknown,
 ): ProjectDetail {
   const fields = [
     project.id,
@@ -93,21 +95,23 @@ function withRevisions(
       .sort((a, b) => a.id.localeCompare(b.id)),
   ];
   const reviewedMilestones = milestones.map(withMilestoneRevision);
+  const lockRevision = revision([
+    fields,
+    project.status,
+    reviewedMilestones.map((milestone) => [
+      milestone.id,
+      milestone.position,
+      milestone.reviewRevision,
+    ]),
+  ]);
   return {
     ...project,
     members,
     milestones: reviewedMilestones,
     activity,
     editRevision: revision(fields),
-    lockRevision: revision([
-      fields,
-      project.status,
-      reviewedMilestones.map((milestone) => [
-        milestone.id,
-        milestone.position,
-        milestone.reviewRevision,
-      ]),
-    ]),
+    lockRevision,
+    completionRevision: revision([lockRevision, completionFacts]),
   };
 }
 
@@ -136,21 +140,28 @@ export async function getProject(
       return getProject(id, actor, transaction);
     });
   await projectAccess(id, actor, sql);
-  const [rows, members, milestones, activity] = await Promise.all([
-    sql<
-      Project[]
-    >`select id,name,description,status,budget,currency,start_date::text as "startDate",due_date::text as "dueDate",updated_at::text as "updatedAt" from projects where id=${id}`,
-    sql<
-      ProjectMember[]
-    >`select c.id,c.name,pc.role,(c.deleted_at is not null) as archived from project_clients pc join clients c on c.id=pc.client_id where pc.project_id=${id} order by pc.role desc,c.name,c.id`,
-    sql<
-      Omit<Milestone, "reviewRevision">[]
-    >`select id,project_id as "projectId",name,description,status,position,due_date::text as "dueDate" from milestones where project_id=${id} order by position,id`,
-    sql<
-      ProjectDetail["activity"]
-    >`select id,event_type as "eventType",actor_type as "actorType",created_at::text as "createdAt" from project_activity where project_id=${id} and event_type not like 'invoice.%' order by created_at desc,id desc limit 30`,
-  ]);
+  const [rows, members, milestones, activity, submissions, files] =
+    await Promise.all([
+      sql<
+        Project[]
+      >`select id,name,description,status,budget,currency,start_date::text as "startDate",due_date::text as "dueDate",updated_at::text as "updatedAt" from projects where id=${id}`,
+      sql<
+        ProjectMember[]
+      >`select c.id,c.name,pc.role,(c.deleted_at is not null) as archived from project_clients pc join clients c on c.id=pc.client_id where pc.project_id=${id} order by pc.role desc,c.name,c.id`,
+      sql<
+        Omit<Milestone, "reviewRevision">[]
+      >`select id,project_id as "projectId",name,description,status,position,due_date::text as "dueDate" from milestones where project_id=${id} order by position,id`,
+      sql<
+        ProjectDetail["activity"]
+      >`select id,event_type as "eventType",actor_type as "actorType",created_at::text as "createdAt" from project_activity where project_id=${id} and event_type not like 'invoice.%' order by created_at desc,id desc limit 30`,
+      // Independent of the paged activity: unchanged terms in a later round must not revive an old decision.
+      sql`select id from project_activity where project_id=${id} and event_type='project.submitted_for_approval' order by created_at desc,id desc limit 1`,
+      sql`select d.id,d.filename,d.sha256,d.version,d.parent_deliverable_id,d.released from deliverables d join milestones m on m.id=d.milestone_id where m.project_id=${id} order by d.id`,
+    ]);
   const project = rows[0];
   if (!project) throw new AppError(404, "NOT_FOUND", "Project not found.");
-  return withRevisions(project, members, milestones, activity);
+  return withRevisions(project, members, milestones, activity, [
+    submissions[0]?.id ?? null,
+    files,
+  ]);
 }

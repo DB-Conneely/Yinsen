@@ -187,6 +187,7 @@ export async function ProjectWorkspace({
       {project.status === "paused" && (
         <p className="card">This project is paused.</p>
       )}
+      <ProjectActions project={project} operator={operator} primary={primary} />
       <section className="card project-overview">
         <div className="project-scope">
           <h2>Scope</h2>
@@ -215,7 +216,6 @@ export async function ProjectWorkspace({
             </dd>
           </div>
         </dl>
-        <ProjectActions project={project} operator={operator} />
       </section>
       <section className="project-section" aria-label="Project milestones">
         <div className="page-heading">
