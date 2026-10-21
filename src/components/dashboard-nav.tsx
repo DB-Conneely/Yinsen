@@ -53,6 +53,16 @@ export function DashboardNavigation({
       )}
       <MessageNotifications role={role} />
       {role === "operator" && (
+        <Link
+          href="/dashboard/settings"
+          aria-current={
+            pathname?.startsWith("/dashboard/settings") ? "page" : undefined
+          }
+        >
+          Settings
+        </Link>
+      )}
+      {role === "operator" && (
         <Link href="/" className="public-nav">
           <span aria-hidden="true">↗</span>Public portal
         </Link>

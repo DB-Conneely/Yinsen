@@ -77,7 +77,12 @@ try {
     headers: { Cookie: cookie },
   });
   assert.equal(dashboard.status, 200);
-  assert.match(await dashboard.text(), /Welcome.*Remote Operator/);
+  const dashboardHtml = await dashboard.text();
+  assert.match(
+    dashboardHtml.replaceAll(/<!--.*?-->/g, ""),
+    /<h1>Welcome, Remote<\/h1>/,
+  );
+  assert.match(dashboardHtml, /<strong>Remote Operator<\/strong>/);
   assert.match(dashboard.headers.get("set-cookie") ?? "", /Max-Age=7776000/);
   assert.match(dashboard.headers.get("cache-control") ?? "", /no-store/);
   for (const [path, title] of [
@@ -123,7 +128,7 @@ try {
     const body = await failed.text();
     // The browser hydrates the framework's Reload control from this error document.
     assert.match(body, /<html id="__next_error__">/);
-    assert.doesNotMatch(body, /Welcome, Remote Operator/);
+    assert.doesNotMatch(body, /<strong>Remote Operator<\/strong>|<h1>Welcome,/);
     assert.equal(
       (await fetch(`${origin}/api/auth/me`, { headers: { Cookie: cookie } }))
         .status,

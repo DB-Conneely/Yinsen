@@ -20,8 +20,27 @@ export default function OperatorGuide(): ReactElement {
       </p>
       <p>
         Setup needs no email, payment or storage service. The database check
-        verifies a live connection and current migrations. Optional integrations
-        are added alongside their usable features.
+        verifies a live connection and current migrations. Optional Resend
+        email, direct Stripe payment and private S3-compatible storage use
+        server environment configuration. Without them, use manual client links,
+        full manual settlement and persistent local files. Never put credentials
+        in browser settings.
+      </p>
+      <h2>Branding and account settings</h2>
+      <p>
+        <Link href="/dashboard/settings">Open operator settings</Link> to change
+        branding, public business contact details, welcome copy, future currency
+        defaults, invoice numbering/instructions, appearance and account
+        security. Saved business settings apply on the next page load; no
+        restart is needed. Your personal light/dark/system choice stays in this
+        browser. Issued invoices retain their original identity, currency,
+        instructions and logo. Uploaded logos are public; attachments and
+        deliverables remain private.
+      </p>
+      <p>
+        Allow automatic updates saves permission only and defaults to off.
+        Saving starts no update. A deployment service must be configured
+        separately.
       </p>
       <p>
         For commands and configuration details, open <code>README.md</code> in

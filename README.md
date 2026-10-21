@@ -2,7 +2,7 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
-Development is ongoing. The current runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement and direct Stripe Checkout payments. Remaining product features and integrated verification are in progress.
+Development is ongoing. The current runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement, direct Stripe Checkout payments, completion/disputes/archive, operator dashboard/analytics and installation settings. Integrated verification and installation/recovery work remain in progress.
 
 ## Run with Docker Compose
 
@@ -34,6 +34,8 @@ The operator signs in at `/login`. Create clients in the dashboard, then generat
 
 Create a project, choose its primary and additional client members, add milestones and send it for lock-in. An eligible member reviews and agrees the scope; the project becomes active. The operator can pause/resume work, and only the current primary client can approve a milestone in review.
 
+When work is ready, the operator requests completion review from the project workspace. The current primary client can accept or request changes with a reason, which appears in the project conversation. Changes return the project to active work for another review. The operator can archive a completed project; its conversation, invoices and authorized file history remain available. A decision must match the current submitted work and review round.
+
 General conversations and project conversations support private messages and attachments. Either party can propose a project in the general conversation, counter its terms or reject it. Accepting the latest proposal creates one active project with the agreed budget and ordered milestones. Manually created projects keep their separate lock-in workflow.
 
 Upload deliverables from a milestone in the project workspace, choosing a new file or a version of an existing deliverable. Every version starts locked. The operator can release or relock each version independently; clients can download only currently released versions, including in the version history. Deliverables use the same private local or S3 storage and per-file size limit as attachments, with one file per upload. Ordinary message attachments remain available without a release or payment gate.
@@ -43,6 +45,14 @@ Create invoices from the dashboard. Choose the recipient, currency, line items a
 With email configured, sending submits the invoice link to the recipient. An email failure leaves the draft available to retry. Without email, send the invoice and privately share its portal link; the recipient must sign in. Record a full manual settlement with its payment method and reference after receiving the exact invoice amount. Partial or excess amounts cannot settle it. Paid and settled invoices cannot be cancelled or deleted.
 
 Link milestones only when payment of **any one linked invoice** should release every deliverable version then present on those milestones. Other linked invoices may remain unpaid. No links means no automatic release. Later uploads remain locked; a repeated settlement does not undo a manual relock.
+
+The operator overview links to overdue invoices, requested changes, pending decisions, unread conversations and active projects. Analytics offers 30-day, 90-day, 12-month and all-time views. Revenue counts each fully paid or settled invoice once in its frozen currency; currencies stay separate. Outstanding balances show current unpaid invoices regardless of the selected period. Project completion uses recorded client acceptance and includes later archive; project/client counts use creation dates. Workspace changes refresh the views automatically, including after reconnect.
+
+Open **Settings** to save branding, public business/contact details, welcome copy, default currency and invoicing defaults in separate sections. Choose a brand colour visually or paste its hex value. Light and dark themes each have custom background and card-surface colours, with presets as starting points. Text and controls adapt for readability; unsupported colour pairs show a validation message and retain your edits. Typography, density, corners and colours have a preview. These are installation choices; the header's light/dark/system preference belongs to the current browser. Reload an already-open page to see saved branding changes. Default-currency changes do not convert existing projects or invoices, and issued invoice identity, contact details, appearance and logo remain frozen.
+
+Settings also manages operator and client sessions. Changing the operator profile requires the current password. Changing the password or signing out all operator sessions invalidates every operator session, including the current one; sign in again afterward. Client session revocation uses the same access controls as the client workspace.
+
+**Allow automatic updates** defaults off and stores permission only. Saving it does not install, restart or deploy anything. Deployment must be configured separately.
 
 Run one long-lived application process. Live updates, rate limits, expired-access cleanup and overdue invoice checks use that process; multiple replicas are not currently supported. Overdue checks run at startup and hourly.
 
@@ -55,6 +65,8 @@ Local storage is the default and requires no external account. Compose persists 
 For private S3-compatible storage, set `STORAGE_DRIVER=s3` and supply `STORAGE_S3_BUCKET`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY` and `STORAGE_S3_SECRET_KEY`. Cloudflare R2 uses region `auto` and `STORAGE_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`. AWS's standard endpoint is selected by omitting the endpoint and supplying its region. R2 has actual upload/download proof; other vendors have not been independently exercised here. Keep the bucket private. Credentials need Put/Get/Delete object access and HeadBucket for setup verification. S3 mode also requires writable local staging storage.
 
 Attachments stream through currently authorized application endpoints. They have no public file URL or payment gate. `MAX_UPLOAD_SIZE_MB` accepts 1–100 MB per file, with at most five files per message. Failed submissions preserve drafts for retry. Keep original storage available when moving providers: changing configuration does not move existing files.
+
+Brand logos accept PNG, JPEG or WebP up to 2 MiB, or the configured upload cap if lower. Logos use the selected local/S3 storage with a separate public branding URL; private attachments and deliverables keep their own authorization. Replacing or removing the current logo retains old logo bytes for issued invoices and delivered emails. Treat logo contents as public.
 
 Email is optional. Supply both `RESEND_API_KEY` and `EMAIL_FROM_ADDRESS`, or omit both. Use a verified sender domain and disable click tracking for authentication links. The setup verification button submits a test email to Resend's fixed test address and uses provider quota; provider acceptance and actual inbox delivery are distinct. Manual client links remain available if email is unavailable.
 
@@ -109,6 +121,6 @@ Stop development/built source processes sharing `.next` before another build. Ru
 TEST_ISOLATED_DATABASE=1 npm run check
 ```
 
-Installed HTTP suites are `test:http`, `test:access`, `test:clients`, `test:projects`, `test:messages`, `test:proposals`, `test:deliverables` and `test:invoices`. They require an ordinary running isolated application and its matching `TEST_ORIGIN`. Start a fresh fixture process for each security suite's rate-limit window. `test:setup-race` requires a separate empty, migrated fixture and preserves the setup it creates.
+Installed HTTP suites are `test:http`, `test:access`, `test:clients`, `test:projects`, `test:messages`, `test:proposals`, `test:deliverables`, `test:invoices`, `test:analytics` and `test:settings`. They require an ordinary running isolated application and its matching `TEST_ORIGIN`. Start a fresh fixture process for each security suite's rate-limit window. `test:setup-race` requires a separate empty, migrated fixture and preserves the setup it creates. The analytics suite needs a configured operator and current client. Run the settings suite against a fresh isolated installation; it creates its own operator and client.
 
 Passing checks supports actual functional verification through the browser, database and configured provider. Component placement, visual hierarchy, responsive layouts, keyboard/focus, failure/retry and private data access also require review in the running application.

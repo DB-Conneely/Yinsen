@@ -24,6 +24,31 @@ import {
 
 type Fields = z.infer<typeof invoiceFields>;
 
+async function issuerSnapshot(sql: postgres.TransactionSql): Promise<{
+  name: string;
+  email: string;
+  colour: string;
+  instructions: string;
+  details: NonNullable<InvoiceDetail["issuerDetails"]>;
+}> {
+  const rows = await sql<
+    {
+      name: string;
+      email: string;
+      colour: string;
+      instructions: string;
+      details: NonNullable<InvoiceDetail["issuerDetails"]>;
+    }[]
+  >`select s.brand_name as name,coalesce(nullif(s.contact_email,''),o.email) as email,s.brand_colour as colour,s.payment_instructions as instructions,jsonb_build_object('contactPhone',s.contact_phone,'businessAddress',s.business_address,'website',s.website,'logoId',s.logo_id,'typography',s.typography,'density',s.density,'corners',s.corners,'lightPalette',s.light_palette,'darkPalette',s.dark_palette,'lightBackground',s.light_background,'lightSurface',s.light_surface,'darkBackground',s.dark_background,'darkSurface',s.dark_surface) as details from settings s join operator o on o.singleton=s.singleton`;
+  if (!rows[0])
+    throw new AppError(
+      503,
+      "SETUP_REQUIRED",
+      "Complete installation setup first.",
+    );
+  return rows[0];
+}
+
 // All invoice writers use this boundary. Project locks precede the invoice row lock.
 export async function withInvoiceLock<T = InvoiceDetail>(
   id: string,
@@ -175,12 +200,8 @@ export async function createInvoice(
       {
         prefix: string;
         sequence: number;
-        name: string;
-        email: string;
-        colour: string;
-        instructions: string;
       }[]
-    >`update settings set invoice_next_number=invoice_next_number+1 where invoice_next_number<2147483647 returning invoice_prefix as prefix,invoice_next_number-1 as sequence,brand_name as name,(select email from operator) as email,brand_colour as colour,payment_instructions as instructions`;
+    >`update settings set invoice_next_number=invoice_next_number+1 where invoice_next_number<2147483647 returning invoice_prefix as prefix,invoice_next_number-1 as sequence`;
     const settings = defaults[0];
     if (!settings)
       throw new AppError(
@@ -189,7 +210,9 @@ export async function createInvoice(
         "Invoice counter exhausted. Update invoice defaults.",
       );
     const number = `${settings.prefix}-${String(settings.sequence).padStart(3, "0")}`;
-    await sql`insert into invoices(id,client_id,project_id,invoice_number,prefix,sequence,currency,amount,total_override,due_date,notes,recipient_name,recipient_email,issuer_name,issuer_email,brand_colour,payment_instructions) values(${requestId},${fields.clientId},${fields.projectId},${number},${settings.prefix},${settings.sequence},${fields.currency},${invoiceTotals(fields).amount},${fields.totalOverride},${fields.dueDate},${fields.notes},${recipient.name},${recipient.email},${settings.name},${settings.email},${settings.colour},${settings.instructions})`;
+    const issuer = await issuerSnapshot(sql);
+    await sql`insert into invoices(id,client_id,project_id,invoice_number,prefix,sequence,currency,amount,total_override,due_date,notes,recipient_name,recipient_email,issuer_name,issuer_email,brand_colour,payment_instructions) values(${requestId},${fields.clientId},${fields.projectId},${number},${settings.prefix},${settings.sequence},${fields.currency},${invoiceTotals(fields).amount},${fields.totalOverride},${fields.dueDate},${fields.notes},${recipient.name},${recipient.email},${issuer.name},${issuer.email},${issuer.colour},${issuer.instructions})`;
+    await sql`update invoices set issuer_name=${issuer.name},issuer_email=${issuer.email},issuer_details=${JSON.stringify(issuer.details)}::jsonb where id=${requestId}`;
     await replaceItems(sql, requestId, fields);
     const invoice = await getInvoice(requestId, actor, sql);
     await activity(sql, invoice, actor, "invoice.created");
@@ -268,17 +291,9 @@ export async function sendInvoice(
           unitPrice: item.unitPrice,
         })),
       });
-      const issuers = await sql<
-        { name: string; email: string; colour: string; instructions: string }[]
-      >`select s.brand_name as name,o.email,s.brand_colour as colour,s.payment_instructions as instructions from settings s join operator o on o.singleton=s.singleton`;
-      const issuer = issuers[0];
-      if (!issuer)
-        throw new AppError(
-          503,
-          "SETUP_REQUIRED",
-          "Complete installation setup first.",
-        );
+      const issuer = await issuerSnapshot(sql);
       await sql`update invoices set recipient_name=${recipient.name},recipient_email=${recipient.email},issuer_name=${issuer.name},issuer_email=${issuer.email},brand_colour=${issuer.colour},payment_instructions=${issuer.instructions} where id=${id}`;
+      await sql`update invoices set issuer_details=${JSON.stringify(issuer.details)}::jsonb where id=${id}`;
       const issued = await getInvoice(id, actor, sql);
       const emailId = readConfiguration().email
         ? await sendInvoiceEmail({

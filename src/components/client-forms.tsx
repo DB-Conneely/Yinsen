@@ -336,14 +336,22 @@ export function ClientActions({
 export function RevokeSession({
   clientId,
   sessionId,
+  onRevoked,
 }: {
   clientId: string;
   sessionId: string;
+  onRevoked?: () => void;
 }): ReactElement {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   async function revoke(): Promise<void> {
+    if (
+      !window.confirm(
+        "Revoke this client session? This browser will lose access immediately.",
+      )
+    )
+      return;
     setPending(true);
     try {
       await clientRequest(
@@ -353,6 +361,7 @@ export function RevokeSession({
         z.object({ revoked: z.literal(true) }),
       );
       router.refresh();
+      onRevoked?.();
     } catch (failure: unknown) {
       setError(
         failure instanceof Error

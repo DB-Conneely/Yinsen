@@ -9,7 +9,11 @@ export const metadata: Metadata = { title: "Operator login" };
 
 export const dynamic = "force-dynamic";
 
-export default async function Login(): Promise<ReactElement> {
+export default async function Login({
+  searchParams,
+}: {
+  searchParams?: Promise<{ security?: string }>;
+} = {}): Promise<ReactElement> {
   const branding = await getBranding();
   if (!branding) redirect("/setup");
   return (
@@ -17,6 +21,12 @@ export default async function Login(): Promise<ReactElement> {
       <main className="card narrow auth-shell" id="main-content">
         <h1>Operator login</h1>
         <p>Welcome back to {branding.brandName}.</p>
+        {(await searchParams)?.security === "changed" && (
+          <p role="status">
+            Account security saved. All operator sessions were signed out. Sign
+            in again to continue.
+          </p>
+        )}
         <LoginForm />
         <p>
           <a href="/portal/login">Client login</a>

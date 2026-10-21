@@ -184,9 +184,12 @@ function multipartParser(
 async function parseMultipart(
   request: Request,
   directory: string,
-  kind: "message" | "deliverable",
+  kind: "message" | "deliverable" | "logo",
 ): Promise<{ fields: Record<string, string>; files: Upload[] }> {
-  const max = readConfiguration().storage.maxBytes;
+  const max =
+    kind === "logo"
+      ? Math.min(2 * 1024 * 1024, readConfiguration().storage.maxBytes)
+      : readConfiguration().storage.maxBytes;
   const count = kind === "message" ? 5 : 1;
   const tasks: Promise<Upload>[] = [];
   const fields: Record<string, string> = {};
@@ -197,11 +200,18 @@ async function parseMultipart(
     parser.destroy(error instanceof Error ? error : invalid("Invalid upload."));
   };
   parser.on("file", (name, stream, info) => {
+    // Busboy also errors the file stream when early type validation destroys its parser.
+    stream.on("error", fail);
     try {
       if (name !== (kind === "message" ? "files" : "file"))
         throw invalid("Unexpected file field.");
       if (!info.filename) throw invalid("An attachment filename is required.");
       const type = attachmentType(info.filename, info.mimeType);
+      if (
+        kind === "logo" &&
+        !["image/png", "image/jpeg", "image/webp"].includes(type)
+      )
+        throw invalid("Choose a PNG, JPEG or WebP logo.");
       const task = stageFile(
         stream,
         join(directory, String(tasks.length)),
@@ -319,9 +329,27 @@ export async function readDeliverableUpload(
   }
 }
 
+export async function readLogoUpload(
+  request: Request,
+): Promise<{ requestId: string; file: Upload; cleanup: () => Promise<void> }> {
+  const upload = await readUpload(request, "logo");
+  try {
+    const { requestId } = z
+      .object({ requestId: z.uuid() })
+      .strict()
+      .parse(upload.fields);
+    const file = upload.files[0];
+    if (!file || upload.files.length !== 1) throw invalid("Choose one logo.");
+    return { requestId, file, cleanup: upload.cleanup };
+  } catch (error: unknown) {
+    await upload.cleanup();
+    throw error;
+  }
+}
+
 async function readUpload(
   request: Request,
-  kind: "message" | "deliverable",
+  kind: "message" | "deliverable" | "logo",
 ): Promise<{
   fields: Record<string, string>;
   files: Upload[];

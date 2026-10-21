@@ -18,6 +18,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { ProposalTerms } from "../messages/proposal-validators";
+import type { Appearance } from "../appearance";
 
 export const installation = pgTable(
   "installation",
@@ -41,12 +42,22 @@ export const operator = pgTable(
     name: text().notNull(),
     email: text().notNull().unique(),
     passwordHash: text("password_hash").notNull(),
+    authGeneration: integer("auth_generation").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [check("operator_singleton", sql`${table.singleton} = true`)],
 );
+
+export const brandingAssets = pgTable("branding_assets", {
+  id: uuid().primaryKey(),
+  key: text().notNull().unique(),
+  driver: text().$type<"local" | "s3">().notNull(),
+  size: integer().notNull(),
+  mimeType: text("mime_type").notNull(),
+  sha256: text().notNull(),
+});
 
 export const settings = pgTable(
   "settings",
@@ -64,11 +75,48 @@ export const settings = pgTable(
     invoicePrefix: text("invoice_prefix").notNull().default("INV"),
     invoiceNextNumber: integer("invoice_next_number").notNull().default(1),
     paymentInstructions: text("payment_instructions").notNull().default(""),
+    contactEmail: text("contact_email").notNull().default(""),
+    contactPhone: text("contact_phone").notNull().default(""),
+    businessAddress: text("business_address").notNull().default(""),
+    website: text().notNull().default(""),
+    logoId: uuid("logo_id").references(() => brandingAssets.id),
+    typography: text()
+      .$type<Appearance["typography"]>()
+      .notNull()
+      .default("editorial"),
+    density: text()
+      .$type<Appearance["density"]>()
+      .notNull()
+      .default("comfortable"),
+    corners: text().$type<Appearance["corners"]>().notNull().default("soft"),
+    lightPalette: text("light_palette")
+      .$type<Appearance["lightPalette"]>()
+      .notNull()
+      .default("warm"),
+    darkPalette: text("dark_palette")
+      .$type<Appearance["darkPalette"]>()
+      .notNull()
+      .default("slate"),
+    lightBackground: text("light_background").notNull().default("#f4f4f0"),
+    lightSurface: text("light_surface").notNull().default("#fffefa"),
+    darkBackground: text("dark_background").notNull().default("#151a20"),
+    darkSurface: text("dark_surface").notNull().default("#1d242c"),
+    allowAutomaticUpdates: boolean("allow_automatic_updates")
+      .notNull()
+      .default(false),
   },
   (table) => [
     check("settings_singleton", sql`${table.singleton} = true`),
     check("settings_colour", sql`${table.brandColour} ~ '^#[0-9A-Fa-f]{6}$'`),
     check("settings_currency", sql`${table.defaultCurrency} ~ '^[A-Z]{3}$'`),
+    check(
+      "settings_surfaces",
+      sql`${table.lightBackground} ~ '^#[0-9A-Fa-f]{6}$' and ${table.lightSurface} ~ '^#[0-9A-Fa-f]{6}$' and ${table.darkBackground} ~ '^#[0-9A-Fa-f]{6}$' and ${table.darkSurface} ~ '^#[0-9A-Fa-f]{6}$'`,
+    ),
+    check(
+      "settings_appearance",
+      sql`${table.typography} in ('editorial','modern') and ${table.density} in ('comfortable','compact') and ${table.corners} in ('soft','square') and ${table.lightPalette} in ('warm','cool') and ${table.darkPalette} in ('slate','midnight')`,
+    ),
     check(
       "settings_invoice_prefix",
       sql`${table.invoicePrefix} ~ '^[A-Z0-9]{1,10}$'`,
@@ -81,6 +129,7 @@ export const settings = pgTable(
 );
 
 export const operatorSessions = pgTable("operator_sessions", {
+  id: uuid().notNull().unique().defaultRandom(),
   tokenHash: text("token_hash").primaryKey(),
   operatorId: uuid("operator_id")
     .notNull()
@@ -457,6 +506,14 @@ export const invoices = pgTable(
     recipientEmail: text("recipient_email").notNull(),
     issuerName: text("issuer_name").notNull(),
     issuerEmail: text("issuer_email").notNull(),
+    issuerDetails: jsonb("issuer_details").$type<
+      Appearance & {
+        contactPhone: string;
+        businessAddress: string;
+        website: string;
+        logoId: string | null;
+      }
+    >(),
     brandColour: text("brand_colour").notNull(),
     paymentInstructions: text("payment_instructions").notNull(),
     emailId: text("email_id"),

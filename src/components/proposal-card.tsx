@@ -103,7 +103,8 @@ export function ProposalCard({
     if (confirmedId) onSaved(confirmedId);
     else
       requestAnimationFrame(() => {
-        if (trigger.current?.disabled) root.current?.focus();
+        if (!trigger.current?.isConnected || trigger.current.disabled)
+          root.current?.focus();
         else trigger.current?.focus();
       });
   }
@@ -186,20 +187,22 @@ export function ProposalCard({
         </>
       )}
       {proposal.projectId && (
-        <a
-          className="button secondary"
-          href={`${operator ? "/dashboard" : "/portal"}/projects/${proposal.projectId}`}
-        >
-          Open agreed project
-        </a>
+        <div className="proposal-footer">
+          <a
+            className="button secondary"
+            href={`${operator ? "/dashboard" : "/portal"}/projects/${proposal.projectId}`}
+          >
+            Open agreed project
+          </a>
+        </div>
       )}
-      {terms && (
+      {terms && proposal.canRespond && (
         <div className="actions">
           {(["accept", "counter", "reject"] as const).map((type) => (
             <button
               key={type}
               className={type === "accept" ? "" : "secondary"}
-              disabled={!proposal.canRespond || pending}
+              disabled={pending}
               onClick={(event) => {
                 trigger.current = event.currentTarget;
                 setMode(type);

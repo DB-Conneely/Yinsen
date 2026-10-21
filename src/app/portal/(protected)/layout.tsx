@@ -18,16 +18,18 @@ export default async function PortalLayout({
     <BrandFrame branding={branding}>
       <div className="dashboard portal-shell">
         <aside className="workspace-sidebar" aria-label="Client navigation">
-          <p className="nav-label">Client portal</p>
-          <DashboardNavigation role="client" />
-          <div className="sidebar-account">
-            <div className="operator-profile">
-              <div>
-                <strong>{identity.name}</strong>
-                <span>Client account</span>
+          <div className="workspace-sidebar-content">
+            <p className="nav-label">Client portal</p>
+            <DashboardNavigation role="client" />
+            <div className="sidebar-account">
+              <div className="operator-profile">
+                <div>
+                  <strong>{identity.name}</strong>
+                  <span>Client account</span>
+                </div>
               </div>
+              <LogoutButton destination="/portal/login" />
             </div>
-            <LogoutButton destination="/portal/login" />
           </div>
         </aside>
         <main className="workspace-content" id="main-content">

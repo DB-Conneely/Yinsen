@@ -24,6 +24,7 @@
     "test:deliverables": "tsx tests/deliverables-http.ts",
     "test:invoices": "tsx tests/invoices-http.ts",
     "test:analytics": "tsx tests/analytics-http.ts",
+    "test:settings": "tsx tests/settings-http.ts",
     "test:setup-race": "tsx tests/setup-race.ts",
     "check:markers": "node scripts/check-markers.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run check:markers && npm run build",

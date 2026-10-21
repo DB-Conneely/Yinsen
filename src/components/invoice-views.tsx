@@ -1,5 +1,6 @@
-import type { ReactElement } from "react";
+import type { ReactElement, CSSProperties } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { AppError } from "../lib/errors";
 import { type ProjectActor } from "../lib/projects/access";
@@ -10,7 +11,8 @@ import {
   type InvoiceDetail,
 } from "../lib/invoices/queries";
 import { invoiceStatus } from "../lib/invoices/validation";
-import { getBranding } from "../lib/settings";
+import { getBranding, getOperatorSettings } from "../lib/settings";
+import { appearanceStyle, defaultAppearance } from "../lib/appearance";
 import { readConfiguration } from "../lib/config";
 import { formatBudget } from "../lib/money";
 import { ProjectLive } from "./project-live";
@@ -46,7 +48,8 @@ export async function InvoiceList({
     actor,
     parsed.success ? { status: parsed.data } : {},
   );
-  const branding = actor.role === "operator" ? await getBranding() : null;
+  const branding =
+    actor.role === "operator" ? await getOperatorSettings(actor) : null;
   const exceptions =
     actor.role === "operator" ? await paymentExceptions(actor) : [];
   const problems =
@@ -162,14 +165,50 @@ export async function InvoiceList({
   );
 }
 
-function InvoicePreview({ invoice }: { invoice: InvoiceDetail }): ReactElement {
+export function InvoicePreview({
+  invoice,
+}: {
+  invoice: InvoiceDetail;
+}): ReactElement {
   return (
-    <article className="card invoice-preview" aria-label="Invoice preview">
+    <article
+      className="card invoice-preview appearance-surface"
+      // CAST: the persisted invoice colour is constrained to a six-digit hex value.
+      style={
+        {
+          ...appearanceStyle(
+            invoice.issuerDetails ?? defaultAppearance,
+            invoice.brandColour,
+          ),
+          "--brand-colour": invoice.brandColour,
+        } as CSSProperties
+      }
+      aria-label="Invoice preview"
+    >
       <div className="invoice-preview-heading">
         <div>
           <p className="eyebrow">From</p>
+          {invoice.issuerDetails?.logoId && (
+            <Image
+              unoptimized
+              className="invoice-logo"
+              src={`/api/branding/logo/${invoice.issuerDetails.logoId}`}
+              alt={`${invoice.issuerName} logo`}
+              width={64}
+              height={64}
+            />
+          )}
           <h2>{invoice.issuerName}</h2>
           <p>{invoice.issuerEmail}</p>
+          {invoice.issuerDetails && (
+            <>
+              <p>{invoice.issuerDetails.contactPhone}</p>
+              <p className="preserve-lines">
+                {invoice.issuerDetails.businessAddress}
+              </p>
+              <p>{invoice.issuerDetails.website}</p>
+            </>
+          )}
         </div>
         <div>
           <p className="eyebrow">Invoice</p>

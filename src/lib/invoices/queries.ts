@@ -6,6 +6,7 @@ import { AppError } from "../errors";
 import { operatorOnly, type ProjectActor } from "../projects/access";
 import { resourceId } from "../projects/validation";
 import { invoiceStatus } from "./validation";
+import type { Appearance } from "../appearance";
 
 export type Invoice = {
   id: string;
@@ -22,6 +23,14 @@ export type Invoice = {
   recipientEmail: string;
   issuerName: string;
   issuerEmail: string;
+  issuerDetails?:
+    | (Appearance & {
+        contactPhone: string;
+        businessAddress: string;
+        website: string;
+        logoId: string | null;
+      })
+    | null;
   brandColour: string;
   paymentInstructions: string;
   emailFailed: boolean;
@@ -44,7 +53,7 @@ export type InvoiceDetail = Invoice & {
   }[];
   milestones: { id: string; name: string }[];
 };
-const fields = `i.id,i.client_id as "clientId",i.project_id as "projectId",i.invoice_number as number,i.status,i.currency,i.amount,i.total_override as "totalOverride",i.due_date::text as "dueDate",i.notes,i.recipient_name as "recipientName",i.recipient_email as "recipientEmail",i.issuer_name as "issuerName",i.issuer_email as "issuerEmail",i.brand_colour as "brandColour",i.payment_instructions as "paymentInstructions",i.email_failed as "emailFailed",i.sent_at::text as "sentAt",i.paid_at::text as "paidAt",i.created_at::text as "createdAt",i.settlement_data as "settlementData"`;
+const fields = `i.id,i.client_id as "clientId",i.project_id as "projectId",i.invoice_number as number,i.status,i.currency,i.amount,i.total_override as "totalOverride",i.due_date::text as "dueDate",i.notes,i.recipient_name as "recipientName",i.recipient_email as "recipientEmail",i.issuer_name as "issuerName",i.issuer_email as "issuerEmail",i.issuer_details as "issuerDetails",i.brand_colour as "brandColour",i.payment_instructions as "paymentInstructions",i.email_failed as "emailFailed",i.sent_at::text as "sentAt",i.paid_at::text as "paidAt",i.created_at::text as "createdAt",i.settlement_data as "settlementData"`;
 
 export async function listInvoices(
   actor: ProjectActor,

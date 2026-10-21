@@ -146,6 +146,8 @@ async function deliverClientLink(
       url: link.url,
       brandName: branding.brandName,
       brandColour: branding.brandColour,
+      details: branding,
+      contactEmail: branding.contactEmail,
       key: `magic-link/${tokenDigest(link.token)}`,
     });
   } catch {

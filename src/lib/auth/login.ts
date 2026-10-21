@@ -15,8 +15,14 @@ export async function loginOperator(
 ): Promise<{ user: OperatorIdentity; session: Session }> {
   const data = loginSchema.parse(input);
   const rows = await getSql()<
-    { id: string; name: string; email: string; password_hash: string }[]
-  >`select id, name, email, password_hash from operator where email = ${data.email}`;
+    {
+      id: string;
+      name: string;
+      email: string;
+      password_hash: string;
+      auth_generation: number;
+    }[]
+  >`select id, name, email, password_hash, auth_generation from operator where email = ${data.email}`;
   const operator = rows[0];
   dummyHash ??= hashPassword("unused-timing-password-9a!");
   const valid = await comparePassword(
@@ -29,14 +35,31 @@ export async function loginOperator(
       "INVALID_CREDENTIALS",
       "Invalid email or password.",
     );
-  const session = await createOperatorSession(operator.id);
-  return {
-    user: {
-      id: operator.id,
-      name: operator.name,
-      email: operator.email,
-      role: "operator",
-    },
-    session,
-  };
+  return getSql().begin(async (sql) => {
+    // Password changes and revoke-all take this same lock before invalidating credentials/sessions.
+    const current = await sql<
+      typeof rows
+    >`select id,name,email,password_hash,auth_generation from operator where id=${operator.id} for update`;
+    const saved = current[0];
+    if (
+      !saved ||
+      saved.password_hash !== operator.password_hash ||
+      saved.auth_generation !== operator.auth_generation ||
+      saved.email !== data.email
+    )
+      throw new AppError(
+        401,
+        "INVALID_CREDENTIALS",
+        "Invalid email or password.",
+      );
+    return {
+      user: {
+        id: saved.id,
+        name: saved.name,
+        email: saved.email,
+        role: "operator" as const,
+      },
+      session: await createOperatorSession(saved.id, sql),
+    };
+  });
 }

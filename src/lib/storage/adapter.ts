@@ -21,7 +21,11 @@ export type StoredFile = {
 };
 
 function keyPath(key: string, config: StorageConfiguration): string {
-  if (!/^(messages|deliverables)\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/.test(key))
+  if (
+    !/^(messages|deliverables|branding)\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/.test(
+      key,
+    )
+  )
     throw new AppError(400, "INVALID_FILE", "Invalid file reference.");
   return join(config.path, key);
 }

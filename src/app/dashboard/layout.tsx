@@ -20,16 +20,18 @@ export default async function DashboardLayout({
     <BrandFrame branding={branding}>
       <div className="dashboard">
         <aside className="workspace-sidebar" aria-label="Operator navigation">
-          <p className="nav-label">Workspace</p>
-          <DashboardNavigation />
-          <div className="sidebar-account">
-            <div className="operator-profile">
-              <div>
-                <strong>{identity.name}</strong>
-                <span>Operator account</span>
+          <div className="workspace-sidebar-content">
+            <p className="nav-label">Workspace</p>
+            <DashboardNavigation />
+            <div className="sidebar-account">
+              <div className="operator-profile">
+                <div>
+                  <strong>{identity.name}</strong>
+                  <span>Operator account</span>
+                </div>
               </div>
+              <LogoutButton />
             </div>
-            <LogoutButton />
           </div>
         </aside>
         <main className="workspace-content" id="main-content">
