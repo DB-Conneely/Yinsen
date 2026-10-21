@@ -38,7 +38,7 @@ export function BrandFrame({
               height={40}
             />
           )}
-          {branding.brandName}
+          <span className="brand-label">{branding.brandName}</span>
         </Link>
         <div className="header-tools">
           <span className="currency-badge">{branding.defaultCurrency}</span>

@@ -274,7 +274,7 @@ describe("real persisted operator access", () => {
     expect(
       renderToStaticMarkup(BrandFrame({ branding, children: "body" })),
     ).toContain("EUR");
-    expect(renderToStaticMarkup(OperatorGuide())).toContain(
+    expect(renderToStaticMarkup(await OperatorGuide())).toContain(
       "server environment",
     );
   });

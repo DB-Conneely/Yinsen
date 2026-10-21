@@ -19,12 +19,15 @@ import {
 import { SettingsForm } from "../src/components/settings-form";
 import SettingsLoading from "../src/app/dashboard/settings/loading";
 import SettingsError from "../src/app/dashboard/settings/error";
+import OperatorGuide, { dynamic } from "../src/app/operator-guide/page";
+import { getBranding } from "../src/lib/settings";
 import { defaultAppearance } from "../src/lib/appearance";
 import type { Branding } from "../src/lib/settings";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
 }));
+vi.mock("../src/lib/settings", () => ({ getBranding: vi.fn() }));
 const branding: Branding = {
   ...defaultAppearance,
   brandName: "Fieldwork",
@@ -38,6 +41,30 @@ const branding: Branding = {
   logoId: "00000000-0000-4000-8000-000000000001",
 };
 describe("installed independent settings sections", () => {
+  it("uses saved public appearance on the guide and keeps configuration recovery available", async () => {
+    vi.mocked(getBranding).mockResolvedValueOnce({
+      ...branding,
+      typography: "modern",
+      lightBackground: "#e9dfd0",
+    });
+    const installed = renderToStaticMarkup(await OperatorGuide());
+    expect(dynamic).toBe("force-dynamic");
+    expect(installed).toContain('class="brand-frame"');
+    expect(installed).toContain("--light-canvas:#e9dfd0");
+    expect(installed).toContain('id="main-content"');
+    expect(installed.match(/class="theme-toggle"/g)).toHaveLength(1);
+    for (const result of [null, new TypeError("Unavailable configuration")]) {
+      if (result instanceof Error)
+        vi.mocked(getBranding).mockRejectedValueOnce(result);
+      else vi.mocked(getBranding).mockResolvedValueOnce(result);
+      const fallback = renderToStaticMarkup(await OperatorGuide());
+      expect(fallback).toContain("Installation configuration");
+      expect(fallback).toContain("Database credentials");
+      expect(fallback).toContain('href="/setup"');
+      expect(fallback).toContain('class="theme-toggle"');
+      expect(fallback).not.toContain('class="brand-frame"');
+    }
+  });
   it("renders saved brand/contact/logo and bounded appearance preview with accessible labels", () => {
     const brand = renderToStaticMarkup(
       createElement(BrandingSettings, { settings: branding }),

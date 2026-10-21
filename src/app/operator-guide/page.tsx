@@ -2,15 +2,25 @@ import type { ReactElement } from "react";
 import { ThemeToggle } from "../../components/theme-toggle";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { BrandFrame } from "../../components/brand";
+import { getBranding, type Branding } from "../../lib/settings";
 
 export const metadata: Metadata = { title: "Installation configuration" };
+export const dynamic = "force-dynamic";
 
-export default function OperatorGuide(): ReactElement {
-  return (
-    <main className="card">
+export default async function OperatorGuide(): Promise<ReactElement> {
+  let branding: Branding | null;
+  try {
+    branding = await getBranding();
+  } catch {
+    // Configuration recovery instructions must remain available without a working database.
+    branding = null;
+  }
+  const guide = (
+    <main className="card" id="main-content">
       <div className="setup-toolbar">
         <Link href="/">Your portal</Link>
-        <ThemeToggle />
+        {!branding && <ThemeToggle />}
       </div>
       <h1>Installation configuration</h1>
       <p>
@@ -62,5 +72,10 @@ export default function OperatorGuide(): ReactElement {
       </p>
       <a href="/setup">Back to setup</a>
     </main>
+  );
+  return branding ? (
+    <BrandFrame branding={branding}>{guide}</BrandFrame>
+  ) : (
+    guide
   );
 }
