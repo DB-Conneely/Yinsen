@@ -585,7 +585,7 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
         ),
       ).rejects.toBeDefined();
       expect(await getProject(initial.id, operator)).toEqual(submitted);
-      const reason = "Please correct the navigation spacing before completion.";
+      const reason = "界".repeat(4000);
       const disputed = await transitionProject(
         initial.id,
         {
@@ -603,7 +603,7 @@ describe("installed project and milestone writers on real PostgreSQL", () => {
         );
         expect(thread.messages).toEqual([
           expect.objectContaining({
-            body: `Completion disputed\n\n${reason}`,
+            body: reason,
             senderId: primary.id,
             senderType: "client",
           }),

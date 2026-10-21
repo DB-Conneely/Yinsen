@@ -17,7 +17,7 @@ export async function POST(
         "FORBIDDEN",
         "Only the primary client can dispute completion.",
       );
-    const data = disputeDecision.parse(await readJson(request));
+    const data = disputeDecision.parse(await readJson(request, 32 * 1024));
     return transitionProject(
       (await context.params).id,
       { status: "active", ...data },

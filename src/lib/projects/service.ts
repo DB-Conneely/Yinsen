@@ -249,11 +249,10 @@ async function writeDispute(
   actor: ProjectActor,
   reason: string,
 ): Promise<void> {
-  const body = `Completion disputed\n\n${reason}`;
   await writeMessage(sql, { kind: "project", id }, actor, {
     id: randomUUID(),
-    body,
-    fingerprint: createHash("sha256").update(body).digest("hex"),
+    body: reason,
+    fingerprint: createHash("sha256").update(reason).digest("hex"),
     type: "message",
     chainId: null,
     replyTo: null,

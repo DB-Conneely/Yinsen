@@ -431,24 +431,50 @@ try {
     ).response.status,
     400,
   );
-  const reason = "Please correct the final mobile spacing before completion.";
+  const beforeDispute = (await call(path, "GET", undefined, operator)).data;
+  for (const [reason, status, code] of [
+    ["界".repeat(4001), 400, "VALIDATION_ERROR"],
+    ["界".repeat(12000), 413, "PAYLOAD_TOO_LARGE"],
+  ] as const) {
+    const denied = await call(
+      path + "/dispute",
+      "POST",
+      { ...firstDecision, reason },
+      primary.credential,
+    );
+    assert.equal(denied.response.status, status);
+    assert.equal(denied.error?.code, code);
+    assert.deepEqual(
+      (await call(path, "GET", undefined, operator)).data,
+      beforeDispute,
+    );
+  }
+  const reason = "界".repeat(4000);
+  // JSON may escape every valid character, not just the revision envelope.
+  const escapedDecision = `{"expectedRevision":"${firstSubmission}","reason":"${"\\u754c".repeat(4000)}"}`;
+  const disputed = await fetch(origin + path + "/dispute", {
+    method: "POST",
+    headers: {
+      origin,
+      "content-type": "application/json",
+      cookie: primary.credential.cookie,
+    },
+    body: escapedDecision,
+  });
+  assert.equal(disputed.status, 200);
+  assert.equal(resultSchema.parse(await disputed.json()).error, null);
   assert.equal(
-    (
-      await call(
-        path + "/dispute",
-        "POST",
-        { ...firstDecision, reason },
-        primary.credential,
-      )
-    ).response.status,
-    200,
+    z
+      .object({ status: z.string() })
+      .parse((await call(path, "GET", undefined, operator)).data).status,
+    "active",
   );
   const storedDisputes =
     await getSql()`select body,sender_id from messages where project_id=${id}`;
   assert.equal(storedDisputes.length, 1);
   assert.deepEqual(
     { ...storedDisputes[0] },
-    { body: `Completion disputed\n\n${reason}`, sender_id: primary.id },
+    { body: reason, sender_id: primary.id },
   );
   const disputedVersion = versions.parse(
     (await call(path, "GET", undefined, operator)).data,

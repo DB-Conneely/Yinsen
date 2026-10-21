@@ -145,7 +145,10 @@ type ProjectDialog = {
   stale: boolean;
 };
 type Model = ProjectDialog & { action: (kind: Action) => Promise<void> };
-function useProjectDialog(project: ProjectDetail): ProjectDialog {
+function useProjectDialog(
+  project: ProjectDetail,
+  focusRoot: () => void,
+): ProjectDialog {
   const [state, setState] = useState(initialState);
   const trigger = useRef<HTMLButtonElement | null>(null);
   function open(kind: Confirmation, button: HTMLButtonElement): void {
@@ -160,7 +163,11 @@ function useProjectDialog(project: ProjectDetail): ProjectDialog {
   }
   function dismiss(): void {
     setState((old) => ({ ...old, confirm: null, error: "" }));
-    trigger.current?.focus();
+    requestAnimationFrame(() => {
+      if (trigger.current?.isConnected && !trigger.current.disabled)
+        trigger.current.focus();
+      else focusRoot();
+    });
   }
   return {
     state,
@@ -172,8 +179,11 @@ function useProjectDialog(project: ProjectDetail): ProjectDialog {
       state.reviewedRevision !== reviewRevision(project, state.confirm),
   };
 }
-function useProjectActions(project: ProjectDetail): Model {
-  const dialog = useProjectDialog(project);
+function useProjectActions(
+  project: ProjectDetail,
+  focusRoot: () => void,
+): Model {
+  const dialog = useProjectDialog(project, focusRoot);
   const router = useRouter();
   async function action(kind: Action): Promise<void> {
     dialog.setState((old) => ({
@@ -398,11 +408,14 @@ export function ProjectActions({
   operator: boolean;
   primary?: boolean;
 }): ReactElement {
-  const model = useProjectActions(project);
+  const root = useRef<HTMLElement>(null);
+  const model = useProjectActions(project, () => root.current?.focus());
   const copy = lifecycleCopy(project, operator, primary);
   return (
     <section
       className="card project-lifecycle"
+      ref={root}
+      tabIndex={-1}
       aria-label="Project actions"
       aria-busy={model.state.pending}
     >
