@@ -113,8 +113,9 @@ export type ConversationSummary = {
 
 export async function messageSummary(
   actor: ProjectActor,
+  sql: postgres.Sql | postgres.TransactionSql = getSql(),
 ): Promise<{ total: number; conversations: ConversationSummary[] }> {
-  const conversations = await getSql()<
+  const conversations = await sql<
     ConversationSummary[]
   >`with conversations as (select 'client'::text as kind,c.id,c.name from clients c where c.deleted_at is null and (${actor.role === "operator"} or c.id=${actor.id}) union all select 'project',p.id,p.name from projects p where p.deleted_at is null and (${actor.role === "operator"} or exists(select 1 from project_clients pc join clients c on c.id=pc.client_id where pc.project_id=p.id and c.id=${actor.id} and c.deleted_at is null))) select c.kind,c.id,c.name,(select count(*)::int from messages m where (c.kind='client' and m.client_id=c.id or c.kind='project' and m.project_id=c.id) and m.sender_id<>${actor.id} and not exists(select 1 from message_reads r where r.message_id=m.id and r.actor_id=${actor.id} and r.actor_type=${actor.role})) as unread,coalesce((select body from messages m where (c.kind='client' and m.client_id=c.id or c.kind='project' and m.project_id=c.id) order by position desc limit 1),'') as "lastBody",(select created_at::text from messages m where (c.kind='client' and m.client_id=c.id or c.kind='project' and m.project_id=c.id) order by position desc limit 1) as "lastAt" from conversations c order by "lastAt" desc nulls last,c.name,c.id`;
   return {

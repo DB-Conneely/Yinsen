@@ -41,6 +41,16 @@ export function DashboardNavigation({
       >
         Invoices
       </Link>
+      {role === "operator" && (
+        <Link
+          href="/dashboard/analytics"
+          aria-current={
+            pathname?.startsWith("/dashboard/analytics") ? "page" : undefined
+          }
+        >
+          Analytics
+        </Link>
+      )}
       <MessageNotifications role={role} />
       {role === "operator" && (
         <Link href="/" className="public-nav">

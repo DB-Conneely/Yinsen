@@ -39,6 +39,7 @@ import {
 import { readDeliverableUpload } from "../src/lib/storage/upload";
 import { currencyDigits } from "../src/lib/money";
 import { getBranding } from "../src/lib/settings";
+import { readAnalytics } from "../src/lib/analytics/queries";
 import { POST as webhookPost } from "../src/app/api/webhooks/stripe/route";
 
 vi.mock("stripe", async (original) => {
@@ -603,6 +604,10 @@ describe("direct Stripe invoice ownership", () => {
     }
   });
   it("retains old sessions and processes a genuine old payment before a distinct late payment", async () => {
+    const beforeRevenue =
+      (await readAnalytics(actor, "all")).revenue.currencies.find(
+        (r) => r.currency === "GBP",
+      )?.totalRevenue ?? "0";
     const id = await invoice();
     const old = await sessionFor(id);
     await deliver({ ...old, status: "expired" }, "checkout.session.expired");
@@ -615,6 +620,13 @@ describe("direct Stripe invoice ownership", () => {
       (await paymentExceptions(actor)).some((value) => value.invoiceId === id),
     ).toBe(true);
     expect((await invoiceAttempts(getSql(), id)).length).toBe(2);
+    const afterRevenue =
+      (await readAnalytics(actor, "all")).revenue.currencies.find(
+        (r) => r.currency === "GBP",
+      )?.totalRevenue ?? "0";
+    expect(BigInt(afterRevenue) - BigInt(beforeRevenue)).toBe(
+      BigInt((await getInvoice(id, actor)).amount),
+    );
   });
   it("keeps cancelled/deleted historical payments visible and records external resolution", async () => {
     const id = await invoice();

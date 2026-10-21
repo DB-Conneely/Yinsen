@@ -147,7 +147,7 @@ export async function saveClient(
 ): Promise<Client> {
   const data = (id ? clientFields.partial() : clientInput).parse(input);
   try {
-    return await getSql().begin(async (sql) => {
+    const result = await getSql().begin(async (sql) => {
       if (id) await lockClient(sql, id);
       const current = id ? await getClient(id, sql) : undefined;
       const parsed = mergeClientFields(current, data);
@@ -162,6 +162,8 @@ export async function saveClient(
       );
       return getClient(savedId, sql);
     });
+    publishClientAccess(result.id);
+    return result;
   } catch (error: unknown) {
     // Next's separate server bundles can contain distinct PostgresError classes.
     if (
