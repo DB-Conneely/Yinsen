@@ -4,7 +4,7 @@ Yinsen is MIT licensed; contributions use the same license. This package support
 one operator and client accounts per independently owned installation. Keep
 changes focused, explain the user-visible problem and include meaningful checks.
 
-Use Node22.21.1/npm10.9.4, `npm ci` and the private configuration in
+Use Node22.21.1/npm10.9.4, ripgrep (`rg`), `npm ci` and the private configuration in
 [INSTALL.md](INSTALL.md). Use isolated synthetic PostgreSQL databases named
 `yinsen_test_…`, with separate runtime/migrator roles. Export matching
 `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DATABASE_SSL=disable` for local fixtures,

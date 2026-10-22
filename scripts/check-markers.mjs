@@ -16,4 +16,8 @@ const scan = spawnSync(
   ],
   { stdio: "inherit" },
 );
+if (scan.error)
+  process.stderr.write(
+    `Marker scan could not start: ${scan.error.message}\nInstall ripgrep (rg) before running the source gates.\n`,
+  );
 if (scan.status !== 1) process.exit(scan.status === 0 ? 1 : (scan.status ?? 2));

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -11,6 +10,7 @@ import {
 import { resolve } from "node:path";
 import { z } from "zod";
 import { artifactSetSchema, releaseIdentitySchema } from "../src/lib/release";
+import { qualificationCommand } from "./qualification-command";
 
 const directory = resolve(process.env.PACKAGE_DIRECTORY ?? ".local/package");
 const artifactsPath = `${directory}/artifacts.json`;
@@ -113,23 +113,11 @@ function run(
   environment: NodeJS.ProcessEnv = env,
 ): string {
   const logfile = `${fixture}/${String(++command).padStart(2, "0")}-${program}.log`;
-  const result = spawnSync(program, args, {
-    env: environment,
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  writeFileSync(logfile, `${result.stdout ?? ""}\n${result.stderr ?? ""}`, {
-    mode: 0o600,
-  });
-  assert.equal(
-    result.status,
-    0,
-    `Qualification command ${command} failed; inspect ${logfile} and retained resources (${project}).`,
-  );
+  const output = qualificationCommand(program, args, environment, logfile);
   process.stdout.write(
     `Qualification ${command}: ${program} ${args.includes("check") ? "check" : "stage"} passed.\n`,
   );
-  return result.stdout ?? "";
+  return output;
 }
 function connection(db: string): NodeJS.ProcessEnv {
   return {
