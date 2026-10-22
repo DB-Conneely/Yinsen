@@ -88,11 +88,11 @@ export function migrationIdentity(): Pick<
   };
 }
 
-export function readReleaseIdentity(
-  path = "release.json",
-): z.infer<typeof releaseIdentitySchema> {
-  if (existsSync(path))
-    return releaseIdentitySchema.parse(JSON.parse(readFileSync(path, "utf8")));
+export function readReleaseIdentity(): z.infer<typeof releaseIdentitySchema> {
+  if (existsSync("release.json"))
+    return releaseIdentitySchema.parse(
+      JSON.parse(readFileSync("release.json", "utf8")),
+    );
   return {
     format: 1,
     version,

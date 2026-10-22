@@ -80,4 +80,35 @@ describe("installed standalone commands", () => {
     });
     expect(result.status, result.stderr.toString()).toBe(7);
   });
+
+  it("refuses a standalone artifact containing private source uploads or records", () => {
+    const root = mkdtempSync(join(tmpdir(), "yinsen-private-trace-"));
+    mkdirSync(join(root, ".next/static"), { recursive: true });
+    mkdirSync(join(root, ".next/standalone/data/uploads"), { recursive: true });
+    mkdirSync(join(root, ".next/standalone/docs"), { recursive: true });
+    writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
+    writeFileSync(
+      join(root, ".next/standalone/data/uploads/private-sentinel"),
+      "synthetic-private-upload",
+    );
+    writeFileSync(
+      join(root, ".next/standalone/docs/private-sentinel"),
+      "synthetic-private-record",
+    );
+    const result = spawnSync(
+      process.execPath,
+      [tsx, resolve("scripts/standalone.ts")],
+      { cwd: root },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr.toString()).toContain(
+      "Unexpected standalone project paths: data, docs.",
+    );
+    expect(
+      readFileSync(
+        join(root, ".next/standalone/data/uploads/private-sentinel"),
+        "utf8",
+      ),
+    ).toBe("synthetic-private-upload");
+  });
 });

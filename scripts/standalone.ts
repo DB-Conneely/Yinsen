@@ -1,4 +1,4 @@
-import { cpSync, rmSync } from "node:fs";
+import { cpSync, readdirSync, rmSync } from "node:fs";
 
 cpSync(".next/static", ".next/standalone/.next/static", { recursive: true });
 cpSync("release.json", ".next/standalone/release.json");
@@ -10,4 +10,22 @@ for (const name of [
   ".env.production.local",
 ]) {
   rmSync(`.next/standalone/${name}`, { force: true });
+}
+// A widened file trace must fail the build before private project data ships.
+const runtimeEntries = new Set([
+  ".next",
+  "drizzle",
+  "node_modules",
+  "package.json",
+  "release.json",
+  "server.js",
+]);
+const unexpected = readdirSync(".next/standalone").filter(
+  (name) => !runtimeEntries.has(name),
+);
+if (unexpected.length) {
+  process.stderr.write(
+    `Unexpected standalone project paths: ${unexpected.join(", ")}.\n`,
+  );
+  process.exitCode = 1;
 }
