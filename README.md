@@ -8,7 +8,8 @@ The runtime includes operator/client access, projects, milestones, messages, pri
 
 ## Install and operate
 
-Follow [INSTALL.md](INSTALL.md) for the reproducible, source-bound Docker package,
+Follow [INSTALL.md](INSTALL.md) to install an approved [public release](https://github.com/DB-Conneely/Yinsen/releases)
+using its pinned Docker images, or build a source-bound package. It covers
 fresh private installation, optional providers, exact-image qualification and
 user-controlled CI/publication. [OPERATIONS.md](OPERATIONS.md) covers consistent
 database/file backup, isolated restore, encrypted configuration, opt-in update

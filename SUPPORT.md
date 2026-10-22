@@ -12,9 +12,8 @@ cookies, login links, personal details, invoice contents, tokens, credentials an
 storage keys. Never upload an environment or backup file to an issue.
 
 Use [GitHub issues](https://github.com/DB-Conneely/Yinsen/issues) for ordinary bugs.
-No private vulnerability intake has yet been selected. Contact the repository maintainer privately through the
-channel where you obtained the package before disclosing a security issue; do not
-publish exploit details or private customer data. A response-time or commercial
+Report security issues through [GitHub private vulnerability reporting](https://github.com/DB-Conneely/Yinsen/security/advisories/new).
+Do not publish exploit details or private customer data in an issue. A response-time or commercial
 support guarantee is not implied by the MIT license.
 
 Linux amd64/local Docker is qualified. Optional R2, Resend and direct Stripe have

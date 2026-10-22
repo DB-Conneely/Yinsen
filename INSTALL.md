@@ -12,6 +12,45 @@ Keep a fresh installation private until its operator account has been created.
 Choose a unique Compose project and unused loopback ports for each installation.
 Never reuse another installation's project, volumes or private configuration.
 
+## Install a published release
+
+Choose an approved `build-N` from [Releases](https://github.com/DB-Conneely/Yinsen/releases).
+Use its source tag, runtime/tools references and two matching metadata files together.
+Public packages need no registry login. Install Node22.21.1/npm10.9.4, Git and curl
+on the installation host as well as Docker/Compose; the operator commands run from
+this matching source checkout.
+
+```sh
+YINSEN_RELEASE=build-N # Replace with the approved release tag.
+git clone --branch "$YINSEN_RELEASE" https://github.com/DB-Conneely/Yinsen.git
+cd Yinsen
+mkdir -p .local/approved-release
+curl --fail --location "https://github.com/DB-Conneely/Yinsen/releases/download/$YINSEN_RELEASE/release.json" --output .local/approved-release/release.json
+curl --fail --location "https://github.com/DB-Conneely/Yinsen/releases/download/$YINSEN_RELEASE/release-qualification.json" --output .local/approved-release/release-qualification.json
+npm ci
+git rev-parse HEAD
+sha256sum .local/approved-release/release.json
+cat .local/approved-release/release-qualification.json
+cat .local/approved-release/release.json
+```
+
+Require `passed: true`, an `artifactsSha256` equal to the printed SHA256, and
+`identity.sourceRevision` equal to the checkout's full commit. Stop if any disagree.
+The receipt binds the manifest; obtain both from the trusted release above. Copy
+the manifest's exact `runtime.image` and `tools.image` references into two
+`docker pull` commands and run them. Then verify both installed images:
+
+```sh
+cp .local/approved-release/release.json .local/approved-release/artifacts.json
+PACKAGE_DIRECTORY=.local/approved-release npm run package:verify
+```
+
+Continue at **Create a private installation**, using the published digest references
+for `YINSEN_RUNTIME_IMAGE` and `YINSEN_TOOLS_IMAGE`. Do not build either image on
+the installation host. Retain the matching source, metadata and image references
+with your recovery configuration. The source-build alternative below is for
+contributors and independently qualified local packages.
+
 ## Build from a committed source checkout
 
 Obtain the public source from [DB-Conneely/Yinsen](https://github.com/DB-Conneely/Yinsen):
@@ -147,6 +186,7 @@ for the actual backup/restore, secret-manager and target-local update commands.
 
 ## Qualify the exact distribution
 
+Install ripgrep (`rg`); the strict source-marker check requires it.
 Install the pinned Chromium browser once (`npx playwright install --with-deps
 chromium` on CI; `npx playwright install chromium` where system dependencies
 already exist), then:
@@ -186,6 +226,15 @@ engine-local image ID as portable across workflow runners.
 Repository/registry names come from `github.repository`; no repository identity
 or production credentials are baked into the application.
 
-No agent triggers or publishes this workflow. Live GitHub execution, publication,
-production installation and website integration remain **UNVERIFIED**, reserved
-for separately authorised Phase5.5. Local qualification does not establish them.
+The owner controls source pushes and explicit publication, including actions
+delegated under the owner's authorization. The upstream `release` environment
+requires the owner's review, permits solo self-review, restricts publication to
+main and disables administrator bypass. New GitHub releases use release
+immutability; their tags and attached metadata are locked after publication.
+Fork maintainers must configure their own policy before publishing.
+
+Inspect the actual [workflow run](https://github.com/DB-Conneely/Yinsen/actions/workflows/ci-release.yml)
+and [release](https://github.com/DB-Conneely/Yinsen/releases) for publication proof.
+Source qualification alone does not establish registry publication. Production
+hosting, installation updates and website integration need their own acceptance;
+publishing a package starts none of them.
