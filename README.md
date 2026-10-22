@@ -2,7 +2,7 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
-Development is ongoing. The current runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement, direct Stripe Checkout payments, completion/disputes/archive, operator dashboard/analytics and installation settings. Integrated verification and installation/recovery work remain in progress.
+The runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement, direct Stripe Checkout payments, completion/disputes/archive, operator dashboard/analytics and installation settings. The distribution includes source-bound Docker packaging, exact-image qualification and target-local backup, isolated restore and opt-in update/recovery commands. See the guides below for supported configurations and qualification limits.
 
 ## Install and operate
 
