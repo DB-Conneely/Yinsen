@@ -72,6 +72,9 @@ async function login(page: Page): Promise<void> {
     .fill("remote-proof-password-12!");
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await page.waitForURL(origin + "/dashboard");
+  await page
+    .getByRole("heading", { name: "Welcome, Remote", exact: true })
+    .waitFor();
   await pictures(page, "operator");
 }
 try {

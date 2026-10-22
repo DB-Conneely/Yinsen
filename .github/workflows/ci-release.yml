@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   qualify:
+    if: github.event_name != 'workflow_dispatch' || !inputs.publish
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -44,8 +45,8 @@ jobs:
           retention-days: 7
   publish:
     if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
-    needs: qualify
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     environment: release
     permissions:
       contents: write
@@ -58,11 +59,11 @@ jobs:
         with:
           node-version: 22.21.1
       - run: npm ci
-      - uses: actions/download-artifact@v4.3.0
-        with:
-          name: qualified-images
-          path: .local/package
-      - run: docker load --input .local/package/images.tar
+      - run: npx playwright install --with-deps chromium
+      - run: npm run package:build
+        env:
+          RELEASE_SEQUENCE: ${{ github.run_number }}
+      - run: npm run package:qualify
       - run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
         env:
           GH_TOKEN: ${{ github.token }}

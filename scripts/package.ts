@@ -34,12 +34,18 @@ function verify(): ReturnType<typeof artifactSetSchema.parse> {
     artifacts.identity.sourceRevision && artifacts.identity.releaseSequence,
   );
   for (const artifact of [artifacts.runtime, artifacts.tools]) {
-    assert.equal(
-      run(["image", "inspect", "--format", "{{.Id}}", artifact.image]).trim(),
-      artifact.id,
-    );
+    const resolved = run([
+      "image",
+      "inspect",
+      "--format",
+      "{{.Id}}",
+      artifact.image,
+    ]).trim();
+    // Local IDs belong to this engine; a pinned registry reference resolves on the target.
+    if (artifact.image.startsWith("sha256:"))
+      assert.equal(resolved, artifact.id);
     assert.deepEqual(
-      identity(artifact.id),
+      identity(resolved),
       artifacts.identity,
       "Runtime/tools identity mismatch.",
     );
@@ -126,7 +132,7 @@ function publishImage(
   assert.equal(
     run(["image", "inspect", "--format", "{{.Id}}", String(reference)]).trim(),
     id,
-    "Published digest must resolve to the qualified image config.",
+    "Published digest must resolve to the qualified engine-selected image.",
   );
   return { image: String(reference), id };
 }

@@ -56,11 +56,20 @@ values from `openssl rand -hex 32`. Set `COMPOSE_PROJECT_NAME=yinsen_personal`,
 Source development URLs must match those DB/port/password choices.
 Read the runtime/tools `id` values in `.local/package/artifacts.json` and add
 `YINSEN_RUNTIME_IMAGE=sha256:…` and `YINSEN_TOOLS_IMAGE=sha256:…` to this private
-file. These are exact local image IDs, not tags. For a published release use the
+file. These are exact engine-local image IDs, not tags or portable registry
+digests. Docker's classic and containerd stores can expose different IDs for
+the same underlying artifact. The saved archive preserves the build-host image
+bytes; its local manifest is not a cross-store installation contract.
+For a published release use the
 approved `release.json` references `ghcr.io/owner/repository-runtime@sha256:…`
 and matching tools reference; explicitly `docker pull` both first. Never select
-an unqualified mutable tag. A different host can load the same saved image archive
-with `docker load --input .local/package/images.tar` instead of rebuilding.
+an unqualified mutable tag. Registry references are the portable transport
+contract. On a target, resolve each approved pinned reference with `docker image
+inspect`, compare the actual serving container's `.Image` to that **target-local**
+ID and compare its health release identity to the approved manifest. The manifest's
+`id` retains the builder's provenance; it is not a cross-engine equality promise.
+`package:verify` makes the same distinction: local IDs must match exactly, while
+registry references resolve locally and their embedded release identity must match.
 
 ```sh
 export COMPOSE_FILE=compose.yaml:compose.release.yaml
@@ -161,9 +170,12 @@ rather than accepting healthy status alone.
 read-only repository permission and no deployment secrets. Its explicit manual
 dispatch may request publication through the protected `release` environment.
 Configure that environment with your required reviewers before use. The publish
-job receives the qualified image archive and exact manifest/receipt; it verifies
-them again, pushes those images **without rebuilding**, and writes pinned GHCR
-references into `release.json`. Failed qualification blocks the publish job.
+job builds, qualifies and publishes on **one runner**, using the same repository
+commands as ordinary CI. It verifies the exact manifest/receipt again, pushes
+those images **without rebuilding after qualification**, and writes pinned GHCR
+references into `release.json`. Failed qualification stops the job before any
+registry login, push or release publication. This avoids treating a builder's
+engine-local image ID as portable across workflow runners.
 Repository/registry names come from `github.repository`; no repository identity
 or production credentials are baked into the application.
 
