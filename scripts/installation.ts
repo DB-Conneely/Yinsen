@@ -297,15 +297,19 @@ function resolveImage(reference: string, pull = false): string {
   if (pull && reference.includes("@sha256:")) run(["pull", reference]);
   return run(["image", "inspect", "--format", "{{.Id}}", reference]).trim();
 }
-function verifyArtifacts(artifacts: Artifacts): void {
-  for (const artifact of [artifacts.runtime, artifacts.tools]) {
+function verifyArtifacts(artifacts: Artifacts): Artifacts {
+  const local = { ...artifacts };
+  for (const kind of ["runtime", "tools"] as const) {
+    const artifact = artifacts[kind];
     const id = resolveImage(artifact.image, true);
     if (
       (artifact.image.startsWith("sha256:") && id !== artifact.id) ||
       JSON.stringify(imageIdentity(id)) !== JSON.stringify(artifacts.identity)
     )
       fail("Artifact bytes and approved release identity disagree.");
+    local[kind] = { image: id, id };
   }
+  return local;
 }
 async function health(i: Installation): Promise<unknown> {
   const response = await fetch(`${i.origin}/api/health`, {
@@ -857,14 +861,17 @@ async function update(
     return;
   }
   const previous = await current(i),
-    decision = releaseDecision(previous, approved);
+    // Compare verified bytes on this engine, retaining portable receipts for activation.
+    decision = releaseDecision(
+      verifyArtifacts(previous),
+      verifyArtifacts(approved),
+    );
   if (decision === "duplicate") {
     process.stdout.write(
       "Release already installed; no migration or replacement.\n",
     );
     return;
   }
-  verifyArtifacts(approved);
   await prefix(i, approved);
   if (!(await permission(i))) {
     process.stdout.write(
