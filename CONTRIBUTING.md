@@ -21,7 +21,7 @@ authorization, privacy, accessibility and real failure/replay behavior. Never
 include private environments, credentials, screenshots of real clients, raw proof
 logs or database/file backups in a contribution.
 
-The repository owner controls publication and deployment. No GitHub repository
-URL is invented in this local distribution; use the actual published repository's
-contribution channel when one is selected. See [SUPPORT.md](SUPPORT.md) for safe
-issue and security reporting.
+The repository owner controls publication and deployment. Use
+[DB-Conneely/Yinsen](https://github.com/DB-Conneely/Yinsen) for contributions and
+[its issues](https://github.com/DB-Conneely/Yinsen/issues) for ordinary reproducible
+bugs. See [SUPPORT.md](SUPPORT.md) for safe issue and security reporting.

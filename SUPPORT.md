@@ -11,14 +11,15 @@ behavior and a minimal synthetic reproduction. Keep raw logs private; remove
 cookies, login links, personal details, invoice contents, tokens, credentials and
 storage keys. Never upload an environment or backup file to an issue.
 
-Use the actual published repository's issue channel for ordinary bugs. No public
-support address or private vulnerability intake has yet been selected in this
-local distribution. Contact the repository maintainer privately through the
+Use [GitHub issues](https://github.com/DB-Conneely/Yinsen/issues) for ordinary bugs.
+No private vulnerability intake has yet been selected. Contact the repository maintainer privately through the
 channel where you obtained the package before disclosing a security issue; do not
 publish exploit details or private customer data. A response-time or commercial
 support guarantee is not implied by the MIT license.
 
 Linux amd64/local Docker is qualified. Optional R2, Resend and direct Stripe have
 source-bound nonproduction evidence with the limits in [INSTALL.md](INSTALL.md).
-Other S3 vendors/architectures, multi-replica operation, future-release rollback,
-live GitHub/CD/production and website integration are not claimed verified.
+Other S3 vendors/architectures, multi-replica operation and future-release rollback
+are not claimed verified. Inspect the actual GitHub run/release for qualification
+or publication evidence; production and website integration need proof on the
+specific installation.

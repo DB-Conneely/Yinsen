@@ -4,7 +4,7 @@ description: Query Yinsen's local code graph for callers, impact and ownership d
 ---
 # Graphify for Yinsen
 
-Use the installed local Graphify CLI and inspect `graphify --help` for supported syntax. The graph must belong to this repository and the current recorded source. If absent/stale, use the repo-local refresh-context skill with one writer; no application source in the foundation means no code-graph claim.
+Use the installed local Graphify CLI and inspect `graphify --help` for supported syntax. The graph must belong to this repository and the current recorded source. If absent/stale, use the repo-local refresh-context skill with one writer. Report unavailable tools or incomplete maps without treating them as proof.
 
 Useful installed commands include `graphify affected "Symbol"`, `graphify explain "Symbol"`, `graphify path "A" "B"` and `graphify query "question"`, with `--graph graphify-out/graph.json` where needed. These commands inspect the local graph. Read actual source and installed callers to verify any inferred ownership/connection.
 

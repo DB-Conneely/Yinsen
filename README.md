@@ -2,6 +2,8 @@
 
 A self-hosted client portal for freelancers and small agencies: one operator, client accounts and private shared project work. Yinsen is MIT licensed.
 
+[![Qualification](https://github.com/DB-Conneely/Yinsen/actions/workflows/ci-release.yml/badge.svg)](https://github.com/DB-Conneely/Yinsen/actions/workflows/ci-release.yml)
+
 The runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement, direct Stripe Checkout payments, completion/disputes/archive, operator dashboard/analytics and installation settings. The distribution includes source-bound Docker packaging, exact-image qualification and target-local backup, isolated restore and opt-in update/recovery commands. See the guides below for supported configurations and qualification limits.
 
 ## Install and operate
@@ -11,8 +13,9 @@ fresh private installation, optional providers, exact-image qualification and
 user-controlled CI/publication. [OPERATIONS.md](OPERATIONS.md) covers consistent
 database/file backup, isolated restore, encrypted configuration, opt-in update
 and failure recovery. See [CONTRIBUTING.md](CONTRIBUTING.md) and
-[SUPPORT.md](SUPPORT.md). Live GitHub/publication/production/website execution
-remains unverified.
+[SUPPORT.md](SUPPORT.md). The linked qualification workflow checks exact images;
+registry publication and installation updates are separate owner-controlled
+actions. Production hosting and website integration require their own proof.
 
 Actual isolated installation screens with synthetic example data:
 

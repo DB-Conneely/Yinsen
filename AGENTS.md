@@ -1,12 +1,12 @@
 # Yinsen delivery rules
 
-## Locked foundation; implementation has not started
+## Working product and assigned scope
 
-Neels locked the five-phase/fourteen-task product plan and the workflow on 15 October 2026. This repository centralises the rebuild. The original `/Users/sk3_neels/Desktop/client-portal` repository, code, plans and history remain preserved. This foundation authorises no product implementation or deployment. The next work begins with an explicitly authorised Phase 1 orchestrator.
+Yinsen is a working MIT-licensed self-hosted portal for one operator and client accounts. Keep contributions within the assigned outcome and preserve the installed product, user data and meaningful history. Repository instructions do not authorise publication, infrastructure provisioning or deployment.
 
-Read in order: [README](README.md), [product contract](docs/rebuild/product-contract.md), [delivery plan](docs/rebuild/delivery-plan.md), [delivery process](docs/rebuild/delivery-process.md), all five `.codex/rules/*.md` files, assigned `.codex/agents/*.toml`, and current [handover](docs/handover.md). Once implementation exists, also read current as-built, predecessor QA handover and relevant supervision lessons. Follow the [skills protocol](docs/skills.md).
+Read [README](README.md), [INSTALL](INSTALL.md), [OPERATIONS](OPERATIONS.md), [CONTRIBUTING](CONTRIBUTING.md), all five `.codex/rules/*.md` files and the assigned `.codex/agents/*.toml`. Load the repo-local skills under `.agents/skills/`. If the assignment supplies private plans, handover, as-built or QA records, read them as additional local context; they are not prerequisites for a public checkout and must not be published.
 
-Authority: Neels's instructions -> this file -> active contract/plan -> process/rules/role -> non-conflicting preserved original product detail. Historical documents and generated maps cannot override this authority. A lock is not proof of delivery.
+Authority: repository owner's instructions -> this file -> assigned contract/plan -> rules/role -> non-conflicting historical detail. Historical documents and generated maps cannot override this authority. A plan is not proof of delivery.
 
 ## Verification order: all three required
 
@@ -17,6 +17,8 @@ Authority: Neels's instructions -> this file -> active contract/plan -> process/
 This ranks evidence, not chronological coding/testing steps; develop and verify iteratively. It is not permission to omit a lower item. QA repairs and re-exercises failures until it can truthfully issue VERIFIED. It must not stop at a fixable defect, use missing secrets to omit owned code, or manufacture a verified verdict. A genuine unavailable prerequisite remains explicitly unverified and blocks the affected phase claim.
 
 ## The entire build workflow
+
+For an assigned multi-task phase, follow its explicit delivery protocol below. Routine contributions do not restart the completed rebuild or automatically create a phase/audit lifecycle.
 
 - One orchestrator owns a phase. Dispatch one fresh implementor sequentially per task. Each owns its complete caller, configuration, persistence, UI, tests, functional proof and handover. Phase/task scope is already locked; bind actual paths/resources at launch without reopening routine choices.
 - At phase end, freeze one candidate. Spawn **X parallel task auditors**, one per phase task: X=3 in Phases 1-4, X=2 in Phase 5. Each writes its own report naming **problem, proposed solution and direct touchpoints**, with reproduction/evidence. Audit each task in the cumulative installed system, including affected earlier paths.
@@ -30,7 +32,7 @@ This ranks evidence, not chronological coding/testing steps; develop and verify 
 - Build the MIT open-source self-hosted portal: one operator plus client accounts. Paid installation is an external service; no managed SaaS, Connect, subscription platform, staff accounts or dormant future machinery.
 - Every agent explicitly loads its role, all base/TypeScript rules and applicable path rules. The orchestrator loads its role itself; a role file does not configure the main chat by implication. `.codex/agents` supplies five project roles; fallback dispatch must read the exact same file.
 - You are not alone in the workspace. Preserve others' work; coordinate shared files. Only orchestrator performs authorised Git mutations under the local GitHub workflow skill. Inspect working tree/index/refs/remotes/branches/tags/stashes/worktrees/reflogs/history first; retain recovery paths and logical commits.
-- No history rewrite, repository identity change or deletion of original history/data/recovery copies without explicit authorization for exact destructive targets after stating the consequences. Never push/merge remote main. No agent deploys in any form; Neels deploys manually through GitHub CI/CD.
+- No history rewrite, repository identity change or deletion of original history/data/recovery copies without explicit authorization for exact destructive targets after stating the consequences. Remote pushes/publication require the owner's explicit authorization for the target and action; never force-push. No agent deploys in any form; the owner controls deployment through GitHub CI/CD.
 - Use the smallest complete implementation. Do not weaken validation, authorization, error handling, accessibility, tests or functional proof to save time. Do not add unrelated surfaces or conduct an audit of the preserved old implementation.
 - Run heavy builds and checks **one at a time across all agents**. Never overlap Docker image builds with host builds/checks. Wait for each heavy command to exit before starting another; do not leave heavy commands running in the background. PostgreSQL may run as the required database fixture during a host check. This resource rule follows the laptop overload on 16 October 2026.
 
@@ -38,7 +40,7 @@ This ranks evidence, not chronological coding/testing steps; develop and verify 
 
 Use the repo-local GitHub workflow, Ponytail, refresh-context and Graphify skills under `.agents/skills/`. Refresh maps after structural changes and before candidate review when stale. Use local code-only Graphify and unlabeled clustering; no billable model calls, global cross-repo graph, hooks or automatic build loop. Maps aid navigation and never establish functionality. Missing/stale maps must be reported and restored, never claimed current.
 
-The foundation contains no application code or configured compiler gates. Phase 1.1 must install and exercise the rule-to-command mapping before product handover. Do not claim that documentation alone has enforced a compiler/linter or verified the future product.
+The command mapping is in `package.json`, with isolated PostgreSQL verification described in CONTRIBUTING. Documentation alone never establishes a passing gate or functional proof. Private `docs/`, `.local/`, environments, data and generated maps remain outside the published tree; ignore rules do not replace tracked-content and history review.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

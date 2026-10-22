@@ -14,6 +14,13 @@ Never reuse another installation's project, volumes or private configuration.
 
 ## Build from a committed source checkout
 
+Obtain the public source from [DB-Conneely/Yinsen](https://github.com/DB-Conneely/Yinsen):
+
+```sh
+git clone https://github.com/DB-Conneely/Yinsen.git
+cd Yinsen
+```
+
 Use Node22.21.1/npm10.9.4 to build/qualify the distribution. No registry account is
 needed. Run from the repository root with a clean committed working tree:
 

@@ -221,9 +221,12 @@ the chosen release+receipt and calls this exact target-local command; it receive
 no infrastructure secret from the web process. Do not enroll untrusted PR jobs
 on that runner. The source qualification workflow remains unprivileged.
 
-Live GitHub/CD execution, publication, production provisioning/deployment and
-business-site integration remain **UNVERIFIED**, reserved for separately
-authorized Phase5.5. No job was triggered during local qualification.
+The [qualification workflow](https://github.com/DB-Conneely/Yinsen/actions/workflows/ci-release.yml)
+runs on main pushes and pull requests. Publication requires its explicit
+owner-controlled release dispatch; updating an installation requires the separate
+target dispatch above. Inspect the actual run/release/target results. A passing
+qualification job does not prove publication, production deployment or website
+integration.
 
 Use `docker logs <exact-owned-app-container>` and the corresponding PostgreSQL
 logs privately. Check origin/loopback routing, configured schema and retained
