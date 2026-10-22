@@ -14,6 +14,7 @@ RUN npm run build
 FROM dependencies AS tools
 ARG SOURCE_REVISION
 ARG RELEASE_SEQUENCE
+COPY LICENSE ./LICENSE
 COPY scripts ./scripts
 COPY src ./src
 COPY drizzle ./drizzle
@@ -29,6 +30,7 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
+COPY --chown=node:node LICENSE ./LICENSE
 RUN mkdir -p /app/data/uploads && chown -R node:node /app/data
 USER node
 EXPOSE 3000

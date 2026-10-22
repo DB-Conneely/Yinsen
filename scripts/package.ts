@@ -49,6 +49,18 @@ function verify(): ReturnType<typeof artifactSetSchema.parse> {
       artifacts.identity,
       "Runtime/tools identity mismatch.",
     );
+    assert.deepEqual(
+      execFileSync("docker", [
+        "run",
+        "--rm",
+        "--entrypoint",
+        "cat",
+        resolved,
+        "/app/LICENSE",
+      ]),
+      readFileSync("LICENSE"),
+      "Packaged LICENSE must match the root LICENSE byte-for-byte.",
+    );
   }
   return artifacts;
 }

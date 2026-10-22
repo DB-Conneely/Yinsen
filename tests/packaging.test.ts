@@ -1,10 +1,100 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrationIdentity } from "../src/lib/release";
 
 const tsx = resolve("node_modules/tsx/dist/cli.mjs");
+
+describe("packaged MIT license verification", () => {
+  it.each([
+    ["exact", "exact", true],
+    ["missing", "exact", false],
+    ["changed", "exact", false],
+    ["exact", "missing", false],
+    ["exact", "changed", false],
+  ] as const)(
+    "requires exact license bytes: runtime=%s, tools=%s",
+    (runtimeLicense, toolsLicense, passes) => {
+      const root = mkdtempSync(join(tmpdir(), "yinsen-package-license-"));
+      const runtime = `sha256:${"b".repeat(64)}`;
+      const tools = `sha256:${"c".repeat(64)}`;
+      const identity = {
+        format: 1,
+        version: "0.1.0",
+        sourceRevision: "a".repeat(40),
+        sourceDirty: false,
+        releaseSequence: 1,
+        ...migrationIdentity(),
+      };
+      writeFileSync(join(root, "identity.json"), JSON.stringify(identity));
+      writeFileSync(
+        join(root, "artifacts.json"),
+        JSON.stringify({
+          format: 1,
+          identity,
+          runtime: { image: runtime, id: runtime },
+          tools: { image: tools, id: tools },
+        }),
+      );
+      copyFileSync(resolve("LICENSE"), join(root, "LICENSE"));
+      for (const [kind, license] of [
+        ["runtime", runtimeLicense],
+        ["tools", toolsLicense],
+      ]) {
+        if (license !== "missing") {
+          const bytes = readFileSync(join(root, "LICENSE"));
+          writeFileSync(
+            join(root, `${kind}-LICENSE`),
+            license === "changed" ? bytes.subarray(0, bytes.length - 1) : bytes,
+          );
+        }
+      }
+      // Only Docker is substituted; the real package CLI reads image bytes.
+      writeFileSync(
+        join(root, "docker"),
+        `#!${process.execPath}
+import { readFileSync } from "node:fs";
+const args = process.argv.slice(2);
+if (args[0] === "image") process.stdout.write(args.at(-1));
+else if (args.at(-1) === "/app/release.json") process.stdout.write(readFileSync("identity.json"));
+else if (args.at(-1) === "/app/LICENSE") {
+  const kind = args.at(-2) === "${runtime}" ? "runtime" : "tools";
+  process.stdout.write(readFileSync(kind + "-LICENSE"));
+} else process.exitCode = 2;
+`,
+        { mode: 0o700 },
+      );
+      const result = spawnSync(
+        process.execPath,
+        [tsx, resolve("scripts/package.ts"), "verify"],
+        {
+          cwd: root,
+          env: {
+            ...process.env,
+            PATH: root,
+            PACKAGE_DIRECTORY: root,
+          },
+          encoding: "utf8",
+        },
+      );
+      expect(result.status, result.stderr).toBe(passes ? 0 : 1);
+      if (!passes)
+        expect(result.stderr).toContain(
+          runtimeLicense === "missing" || toolsLicense === "missing"
+            ? "ENOENT"
+            : "Packaged LICENSE must match the root LICENSE byte-for-byte.",
+        );
+    },
+  );
+});
 
 describe("installed standalone commands", () => {
   it("copies static assets and removes only generated dotenv copies", () => {
