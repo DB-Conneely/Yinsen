@@ -9,7 +9,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { artifactSetSchema } from "../src/lib/release";
+import { z } from "zod";
+import { artifactSetSchema, releaseIdentitySchema } from "../src/lib/release";
 
 const directory = resolve(process.env.PACKAGE_DIRECTORY ?? ".local/package");
 const artifactsPath = `${directory}/artifacts.json`;
@@ -51,6 +52,7 @@ const env = {
   STRIPE_SECRET_KEY: "",
   STRIPE_WEBHOOK_SECRET: "",
   STORAGE_DRIVER: "local",
+  MAX_UPLOAD_SIZE_MB: "1",
   STORAGE_LOCAL_PATH: `${fixture}/uploads`,
   STORAGE_S3_BUCKET: "",
   STORAGE_S3_REGION: "",
@@ -71,6 +73,7 @@ const installationKeys = [
   "APP_ORIGIN",
   "DATABASE_SSL",
   "STORAGE_DRIVER",
+  "MAX_UPLOAD_SIZE_MB",
   "STORAGE_LOCAL_PATH",
   "YINSEN_RUNTIME_IMAGE",
   "YINSEN_TOOLS_IMAGE",
@@ -108,7 +111,7 @@ function run(
   program: string,
   args: string[],
   environment: NodeJS.ProcessEnv = env,
-): void {
+): string {
   const logfile = `${fixture}/${String(++command).padStart(2, "0")}-${program}.log`;
   const result = spawnSync(program, args, {
     env: environment,
@@ -126,6 +129,7 @@ function run(
   process.stdout.write(
     `Qualification ${command}: ${program} ${args.includes("check") ? "check" : "stage"} passed.\n`,
   );
+  return result.stdout ?? "";
 }
 function connection(db: string): NodeJS.ProcessEnv {
   return {
@@ -187,20 +191,39 @@ function migrate(db: string): void {
     environment,
   );
 }
-function app(db: string): void {
-  run(
+async function inspectLive(db: string): Promise<void> {
+  const container = run(
     "docker",
-    [...compose, "up", "--no-deps", "-d", "--wait", "app"],
+    [...compose, "ps", "-q", "app"],
     connection(db),
+  ).trim();
+  assert.ok(container);
+  assert.equal(
+    run("docker", ["inspect", "--format", "{{.Image}}", container]).trim(),
+    artifacts.runtime.id,
+  );
+  const response = await fetch(origin + "/api/health");
+  assert.equal(response.status, 200);
+  const health = z
+    .object({ data: z.object({ release: releaseIdentitySchema }) })
+    .parse(await response.json());
+  assert.deepEqual(
+    health.data.release,
+    artifacts.identity,
+    "Served release identity must match the exact qualified images.",
   );
 }
-function suite(name: string, db = database): void {
-  run("docker", [...compose, "restart", "app"], connection(db));
+async function app(db: string): Promise<void> {
   run(
     "docker",
     [...compose, "up", "--no-deps", "-d", "--wait", "app"],
     connection(db),
   );
+  await inspectLive(db);
+}
+async function suite(name: string, db = database): Promise<void> {
+  run("docker", [...compose, "restart", "app"], connection(db));
+  await app(db);
   run("npm", ["run", `test:${name}`], connection(db));
 }
 try {
@@ -225,9 +248,9 @@ try {
   const settings = `yinsen_test_settings_${suffix}`;
   create(settings);
   migrate(settings);
-  app(settings);
-  suite("settings", settings);
-  app(database);
+  await app(settings);
+  await suite("settings", settings);
+  await app(database);
   run("npm", ["run", "test:http"], connection(database));
   run("npm", ["run", "test:browser"], {
     ...connection(database),
@@ -243,7 +266,7 @@ try {
     "clients",
     "access",
   ])
-    suite(name);
+    await suite(name);
   run("npm", ["run", "package:verify"]);
 } finally {
   run("docker", [...compose, "stop", "app", "postgres"]);

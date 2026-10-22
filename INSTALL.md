@@ -150,6 +150,11 @@ returns nonzero and produces no passing receipt. Owned apps/databases stop on
 exit; volumes, synthetic records, screenshots and private stage logs remain under
 `.local/package/qualification-*`. Do not publish these private raw artifacts.
 
+The qualifier explicitly selects a1MB test cap to exercise the existing boundary
+regressions; ordinary installations retain the100MB default. It compares the
+actual serving container image ID and health release identity to the candidate,
+rather than accepting healthy status alone.
+
 ## User-controlled CI and publication
 
 `.github/workflows/ci-release.yml` runs ordinary source qualification with
