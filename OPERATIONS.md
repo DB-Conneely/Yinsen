@@ -17,6 +17,15 @@ provider stores. Put checkpoints on a separate backed-up filesystem with enough
 space for a full database and all retained file bytes. A checkpoint on the same
 disk protects replacement failures, not disk loss.
 
+Keep additional free disk space in the private state directory for one complete
+local file tree (or all checkpoint file bytes for a local recovery copy).
+Operations preflight checkpoint/database and staging capacity before disruption;
+allow extra room for concurrent growth and filesystem overhead. Bulk copies use
+owner-only temporary directories on this state disk and are removed after each
+check/copy. They do not use the user's small runtime tmpfs. The runtime directory
+holds only the small decrypted environment. An interrupted process can leave
+private staging directories; preserve them while diagnosing an interrupted job.
+
 The selected programmatic secret manager is systemd's encrypted user credential
 store. Bootstrap it as the same dedicated OS user that will run operations:
 
@@ -146,14 +155,21 @@ release authority; see [INSTALL.md](INSTALL.md).
 
 After eligibility, the command journals its start, stops writes, makes a complete
 recoverable checkpoint, explicitly runs the approved tools' migrate/status,
-replaces the app, and checks actual container image, served release identity,
+validates retained database/file facts while the app is still stopped, then
+durably records a **forward-only activation boundary** before starting any
+application process or startup consumer. It checks actual container image, served release identity,
 database schema and installed public-page smoke. Operators must also check the
 important authenticated business journeys/downloads after replacement. Update
 success never implies compatibility with hypothetical future releases.
 
-A checkpoint/migration/readiness failure returns nonzero and attempts recovery of
-the previous database/files/image. A failure before a complete checkpoint restarts
-the original app. Same-target recovery preserves remote objects and requires the
+A failure before activation returns nonzero and attempts recovery of the previous
+database/files/image. A failure before a complete checkpoint restarts the original
+app. After activation, new requests and startup tasks may already have committed
+writes: failures preserve the selected target database/files/image and require
+forward repair or restart of that same target, never automatic old-checkpoint
+restoration. The command still returns nonzero if its initial attempt failed;
+inspect the journal and actual health before retrying. This same boundary applies
+to isolated restoration and recovery itself. Same-target recovery preserves remote objects and requires the
 original immutable R2 objects/configuration to remain available. Complete
 independent file recovery is the isolated local-copy procedure above.
 
@@ -162,13 +178,37 @@ npm run installation -- recover /private/yinsen-personal/installation.json
 ```
 
 Use this after correcting the cause of an interrupted/failed recovery. Pending
-journals block new updates/backups. Retained journals identify prior images and
-checkpoint. If power/process loss occurred during migration, restore the complete
-checkpoint; never blindly run the old image against a changed ledger. Restoring
+journals block new updates/backups/restarts. Retained journals identify prior images,
+checkpoint and, after activation, the immutable forward target. If power/process
+loss occurred before activation during migration/retention, recovery restores the
+complete checkpoint. After the durable activation marker, even if the process
+died before starting the app, recovery only activates that recorded target and
+preserves the current database. If that target cannot start, correct its cause
+and repeat recovery; it never reports an unhealthy target as success. Legacy
+ambiguous readiness journals are refused for manual diagnosis with current data
+preserved. Never blindly run an old image against a changed ledger. Restoring
 an earlier checkpoint discards later database writes, so keep the app stopped and
 preserve an additional recovery copy before manual repair. No volume deletion or
 automatic schema downgrade is part of this procedure. Forward repair needs a
 reviewed compatible migration; future schema rollback is not promised.
+
+For a developer's deterministic recovery regression, use only an isolated
+synthetic restore with providers disabled and two genuine qualified releases.
+Run the real update CLI under a localhost Node debugger
+(`node --inspect-brk=127.0.0.1:0 --import tsx scripts/installation.ts update INPUT RELEASE RECEIPT`).
+Pause in `ready()` immediately after Compose starts the candidate but before its
+HTTP checks. Sign in through the ordinary portal and send one message; record its
+successful response, ID and persisted body. On this disposable database only,
+revoke runtime SELECT on `drizzle.__drizzle_migrations`, then continue the updater.
+It must fail with an activation journal and retain that message. Status must
+report unhealthy/forward-only. Restore the grant, run the documented `recover`
+command and verify the same message and private download hashes, without posting
+the message again. A second recovery must refuse a missing journal. Separately,
+kill the debugger-paused CLI at entry to `ready()` before Compose startup: its
+already-recorded activation target must recover forward without `pg_restore`.
+Interrupt `restore-copy` before file copying to check journaled local-copy resume.
+The unit tests validate journal/disk contracts; these real CLI/HTTP/SQL/file
+rehearsals establish the race and recovery behavior.
 
 ## User-controlled workflow and troubleshooting
 

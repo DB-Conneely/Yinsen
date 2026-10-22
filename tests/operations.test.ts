@@ -6,6 +6,7 @@ import { migrationIdentity } from "../src/lib/release";
 import {
   assertPrefix,
   releaseDecision,
+  operationJournalSchema,
   sha256,
   type Artifacts,
 } from "../scripts/operations-contract";
@@ -15,6 +16,7 @@ import {
   safePath,
   verifySnapshot,
   copyRemoteFiles,
+  requireDiskSpace,
 } from "../scripts/installation-files";
 
 const identity = {
@@ -36,6 +38,57 @@ const artifacts: Artifacts = {
 };
 
 describe("installation recovery boundaries", () => {
+  it("requires an explicit immutable forward target after activation and refuses ambiguous old journals", () => {
+    const base = {
+      format: 1,
+      previous: artifacts,
+      checkpoint: "/private/checkpoint",
+    };
+    expect(
+      operationJournalSchema.parse({ ...base, phase: "retention" }).phase,
+    ).toBe("retention");
+    expect(
+      operationJournalSchema.parse({
+        ...base,
+        phase: "activation",
+        target: artifacts,
+      }),
+    ).toMatchObject({ target: artifacts });
+    expect(
+      operationJournalSchema.parse({
+        ...base,
+        phase: "restore",
+        localCopy: true,
+      }),
+    ).toMatchObject({ localCopy: true });
+    expect(
+      operationJournalSchema.safeParse({ ...base, phase: "restore" }).success,
+    ).toBe(false);
+    expect(
+      operationJournalSchema.safeParse({ ...base, phase: "activation" })
+        .success,
+    ).toBe(false);
+    expect(
+      operationJournalSchema.safeParse({ ...base, phase: "readiness" }).success,
+    ).toBe(false);
+    expect(
+      operationJournalSchema.safeParse({
+        ...base,
+        phase: "activation",
+        target: { ...artifacts, identity: { ...identity, sourceDirty: true } },
+      }).success,
+    ).toBe(false);
+  });
+  it("checks real disk availability before accepting bulk staging", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "yinsen-capacity-"));
+    await expect(requireDiskSpace(directory, 1)).resolves.toBeUndefined();
+    await expect(
+      requireDiskSpace(directory, Number.MAX_SAFE_INTEGER),
+    ).rejects.toThrow("Insufficient");
+    await expect(requireDiskSpace(directory, -1)).rejects.toThrow(
+      "Insufficient",
+    );
+  });
   it("requires an unchanged ordered installed migration prefix", () => {
     const rows = identity.migrations
       .slice(0, 9)

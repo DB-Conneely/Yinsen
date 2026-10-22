@@ -5,6 +5,7 @@ import {
   chmodSync,
   constants,
   existsSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -12,6 +13,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
@@ -26,16 +28,19 @@ import {
   assertPrefix,
   fileSchema,
   installationSchema,
+  operationJournalSchema,
   releaseDecision,
   sha256,
   snapshotSchema,
   type Artifacts,
+  type OperationJournal,
   type Snapshot,
 } from "./operations-contract";
 import {
   copyRemoteFiles,
   hashFile,
   inventory,
+  requireDiskSpace,
   safePath,
   verifySnapshot,
 } from "./installation-files";
@@ -53,12 +58,6 @@ type Installation = {
   postgresPort: number;
   origin: string;
 };
-type Journal = {
-  format: 1;
-  previous: Artifacts;
-  checkpoint: string | null;
-  phase: string;
-};
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const action = process.argv[2],
   input = process.argv[3];
@@ -75,7 +74,22 @@ function save(path: string, value: unknown): void {
     mode: 0o600,
     flag: "wx",
   });
+  const fd = openSync(temporary, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
   renameSync(temporary, path);
+  syncDirectory(dirname(path));
+}
+function syncDirectory(path: string): void {
+  const fd = openSync(path, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 function privateFile(path: string): void {
   const metadata = lstatSync(path);
@@ -419,15 +433,28 @@ async function retained(i: Installation, snapshot: Snapshot): Promise<void> {
     JSON.stringify(snapshot.facts)
   )
     fail("Restored/updated business facts differ from the checkpoint.");
-  const directory = join(i.temporary, `retention-${randomUUID()}`);
-  await mkdir(directory, { mode: 0o700 });
-  run(["cp", `${container(i)}:/app/data/uploads/.`, directory]);
-  for (const file of snapshot.files.filter(
-    (file) =>
-      file.driver === "local" || i.configuration.storage.driver === "local",
-  )) {
-    if ((await hashFile(safePath(directory, file.key))) !== file.sha256)
-      fail("Restored/updated retained file bytes differ from the checkpoint.");
+  const bytes = snapshot.inventory
+    .filter(
+      (file) =>
+        file.path.startsWith("local/") ||
+        i.configuration.storage.driver === "local",
+    )
+    .reduce((total, file) => total + file.size, 0);
+  await requireDiskSpace(i.stateDirectory, bytes);
+  const directory = mkdtempSync(join(i.stateDirectory, "retention-"));
+  try {
+    run(["cp", `${container(i)}:/app/data/uploads/.`, directory]);
+    for (const file of snapshot.files.filter(
+      (file) =>
+        file.driver === "local" || i.configuration.storage.driver === "local",
+    )) {
+      if ((await hashFile(safePath(directory, file.key))) !== file.sha256)
+        fail(
+          "Restored/updated retained file bytes differ from the checkpoint.",
+        );
+    }
+  } finally {
+    rmSync(directory, { recursive: true });
   }
 }
 function assertNoWriters(i: Installation): void {
@@ -511,6 +538,7 @@ async function checkpoint(
   i: Installation,
   artifacts: Artifacts,
 ): Promise<string> {
+  await checkpointCapacity(i, artifacts);
   const path = join(
     i.backupDirectory,
     `${new Date().toISOString().replaceAll(":", "-")}-${randomUUID()}`,
@@ -543,6 +571,38 @@ async function checkpoint(
   await sealSnapshot(i, path, snapshot);
   return path;
 }
+async function checkpointCapacity(
+  i: Installation,
+  artifacts: Artifacts,
+): Promise<void> {
+  const local = Number(
+    run([
+      "run",
+      "--rm",
+      "--volume",
+      `${i.project}_uploads_data:/files:ro`,
+      "--entrypoint",
+      "du",
+      artifacts.tools.image,
+      "-sb",
+      "/files",
+    ]).split(/\s/)[0],
+  );
+  const remote = (await references(i))
+    .filter((file) => file.driver === "s3")
+    .reduce((total, file) => total + file.size, 0);
+  const databaseBytes = await database(i, async (sql) => {
+    const rows = await sql<
+      { bytes: string }[]
+    >`select pg_database_size(current_database())::text as bytes`;
+    return Number(rows[0]?.bytes);
+  });
+  const backup = local + remote + databaseBytes;
+  const sharedDisk =
+    statSync(i.stateDirectory).dev === statSync(i.backupDirectory).dev;
+  await requireDiskSpace(i.backupDirectory, backup + (sharedDisk ? local : 0));
+  await requireDiskSpace(i.stateDirectory, local);
+}
 async function sealSnapshot(
   i: Installation,
   path: string,
@@ -563,7 +623,7 @@ async function sealSnapshot(
   await verifySnapshot(path, snapshot);
   save(join(path, "snapshot.json"), snapshot);
 }
-function journal(i: Installation, value: Journal): void {
+function journal(i: Installation, value: OperationJournal): void {
   save(join(i.stateDirectory, "journal.json"), value);
 }
 function restoreDatabase(i: Installation, directory: string): void {
@@ -605,28 +665,32 @@ async function restoreFiles(
   snapshot: Snapshot,
   localCopy: boolean,
 ): Promise<void> {
-  const staging = join(i.temporary, "restore-files");
-  await cp(join(directory, "files", "local"), staging, {
-    recursive: true,
-    errorOnExist: true,
-    force: false,
-  });
-  for (const file of snapshot.files.filter((file) => file.driver === "s3")) {
-    if (!localCopy) continue; // Original immutable remote objects remain untouched during same-target recovery.
-    const destination = safePath(staging, file.key);
-    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
-    await cp(
-      safePath(join(directory, "files", "objects"), file.key),
-      destination,
-      { force: false, errorOnExist: true },
-    );
+  const staging = mkdtempSync(join(i.stateDirectory, "restore-files-"));
+  try {
+    await cp(join(directory, "files", "local"), staging, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+    for (const file of snapshot.files.filter((file) => file.driver === "s3")) {
+      if (!localCopy) continue; // Original immutable remote objects remain untouched during same-target recovery.
+      const destination = safePath(staging, file.key);
+      await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+      await cp(
+        safePath(join(directory, "files", "objects"), file.key),
+        destination,
+        { force: false, errorOnExist: true },
+      );
+    }
+    attachRestoredFiles(i, staging, snapshot.artifacts.tools.image);
+    if (localCopy)
+      psql(i, [
+        "-c",
+        "begin; update branding_assets set driver='local' where driver='s3'; update message_attachments set driver='local' where driver='s3'; update deliverables set driver='local' where driver='s3'; commit;",
+      ]);
+  } finally {
+    rmSync(staging, { recursive: true });
   }
-  attachRestoredFiles(i, staging, snapshot.artifacts.tools.image);
-  if (localCopy)
-    psql(i, [
-      "-c",
-      "begin; update branding_assets set driver='local' where driver='s3'; update message_attachments set driver='local' where driver='s3'; update deliverables set driver='local' where driver='s3'; commit;",
-    ]);
 }
 function attachRestoredFiles(
   i: Installation,
@@ -661,51 +725,97 @@ async function restore(
   i: Installation,
   directory: string,
   localCopy: boolean,
+  resuming = false,
 ): Promise<Snapshot> {
-  const snapshot = snapshotSchema.parse(json(join(directory, "snapshot.json")));
-  await verifySnapshot(directory, snapshot);
-  verifyArtifacts(snapshot.artifacts);
+  const snapshot = await validateRestore(i, directory, localCopy);
   compose(i, ["up", "-d", "--wait", "postgres"]);
-  if (localCopy) {
-    const count = compose(i, [
-      "exec",
-      "-T",
-      "postgres",
-      "psql",
-      "-U",
-      "postgres",
-      "-d",
-      i.database,
-      "-Atc",
-      "select count(*) from pg_tables where schemaname in ('public','drizzle')",
-    ]).trim();
-    if (count !== "0") fail("Restore-copy refuses a nonempty target database.");
-  }
+  if (localCopy && !resuming) assertFreshDatabase(i);
+  journal(i, {
+    format: 1,
+    previous: snapshot.artifacts,
+    checkpoint: directory,
+    phase: "restore",
+    localCopy,
+  });
   compose(i, ["stop", "--timeout", "30", "app"]);
   assertNoWriters(i);
   restoreDatabase(i, directory);
   select(i, snapshot.artifacts);
   compose(i, ["create", "app"]);
   await restoreFiles(i, directory, snapshot, localCopy);
-  await ready(i, snapshot.artifacts);
   await retained(i, snapshot);
-  save(join(i.stateDirectory, "active.json"), snapshot.artifacts);
+  await activate(i, snapshot.artifacts, directory, snapshot.artifacts);
   return snapshot;
+}
+async function validateRestore(
+  i: Installation,
+  directory: string,
+  localCopy: boolean,
+): Promise<Snapshot> {
+  if (
+    localCopy &&
+    (i.configuration.email ||
+      i.configuration.stripe ||
+      i.configuration.storage.driver !== "local")
+  )
+    fail("Recovery copies require local storage and disabled email/Stripe.");
+  const snapshot = snapshotSchema.parse(json(join(directory, "snapshot.json")));
+  await verifySnapshot(directory, snapshot);
+  verifyArtifacts(snapshot.artifacts);
+  await requireDiskSpace(
+    i.stateDirectory,
+    snapshot.inventory
+      .filter((file) => file.path.startsWith("local/") || localCopy)
+      .reduce((total, file) => total + file.size, 0),
+  );
+  return snapshot;
+}
+function assertFreshDatabase(i: Installation): void {
+  const count = compose(i, [
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-U",
+    "postgres",
+    "-d",
+    i.database,
+    "-Atc",
+    "select count(*) from pg_tables where schemaname in ('public','drizzle')",
+  ]).trim();
+  if (count !== "0") fail("Restore-copy refuses a nonempty target database.");
+}
+async function activate(
+  i: Installation,
+  target: Artifacts,
+  checkpoint: string | null,
+  previous: Artifacts,
+): Promise<void> {
+  // Before any startup consumer or request can write, recovery becomes forward-only.
+  journal(i, { format: 1, previous, checkpoint, phase: "activation", target });
+  select(i, target);
+  save(join(i.stateDirectory, "active.json"), target);
+  await ready(i, target);
 }
 async function recover(i: Installation): Promise<void> {
   const path = join(i.stateDirectory, "journal.json");
   if (!existsSync(path)) fail("No interrupted operation journal exists.");
-  const value: unknown = json(path);
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("previous" in value) ||
-    !("checkpoint" in value)
-  )
-    fail("Invalid recovery journal.");
-  const previous = artifactSetSchema.parse(value.previous);
-  if (typeof value.checkpoint === "string")
-    await restore(i, value.checkpoint, false);
+  const parsed = operationJournalSchema.safeParse(json(path));
+  if (!parsed.success)
+    fail(
+      "Invalid or legacy ambiguous recovery journal. Preserve the current database and obtain operator repair; no automatic restore is safe.",
+    );
+  const value = parsed.data,
+    previous = value.previous;
+  if (value.phase === "activation")
+    await activate(i, value.target, value.checkpoint, previous);
+  else if (typeof value.checkpoint === "string")
+    await restore(
+      i,
+      value.checkpoint,
+      value.phase === "restore" && value.localCopy,
+      true,
+    );
   else {
     select(i, previous);
     await ready(i, previous);
@@ -716,6 +826,7 @@ async function recover(i: Installation): Promise<void> {
     previous,
   });
   renameSync(path, join(i.stateDirectory, `recovered-${randomUUID()}.json`));
+  syncDirectory(i.stateDirectory);
 }
 function candidate(path: string, receiptPath: string): Artifacts {
   const bytes = readFileSync(path),
@@ -775,15 +886,15 @@ async function replace(
     select(i, approved);
     compose(i, ["run", "--rm", "migrate"]);
     compose(i, ["run", "--rm", "migrate", "npm", "run", "db:status"]);
-    journal(i, { format: 1, previous, checkpoint: path, phase: "readiness" });
-    await ready(i, approved);
+    journal(i, { format: 1, previous, checkpoint: path, phase: "retention" });
     await retained(i, snapshotSchema.parse(json(join(path, "snapshot.json"))));
+    await activate(i, approved, path, previous);
     completeUpdate(i, approved, path);
   } catch {
     try {
       await recover(i);
       process.stderr.write(
-        "Update failed; previous database/files/image recovered.\n",
+        "Update failed; recovery completed. Before activation this restores the previous checkpoint; after activation it preserves the selected target and all new writes.\n",
       );
     } catch {
       process.stderr.write(
@@ -809,6 +920,7 @@ function completeUpdate(
     join(i.stateDirectory, "journal.json"),
     join(i.stateDirectory, `completed-${randomUUID()}.json`),
   );
+  syncDirectory(i.stateDirectory);
   process.stdout.write(
     "Qualified release installed; exact serving identity and schema verified.\n",
   );
@@ -868,33 +980,52 @@ async function main(i: Installation): Promise<void> {
     );
 }
 async function status(i: Installation): Promise<void> {
-  const installed = await current(i);
+  const installed = installedArtifacts(i);
+  let healthy = false;
+  try {
+    healthy =
+      JSON.stringify(await health(i)) === JSON.stringify(installed.identity);
+  } catch {
+    /* Status still exposes the safe recovery mode when the target is unhealthy. */
+  }
+  const path = join(i.stateDirectory, "journal.json");
+  const pending = existsSync(path)
+    ? operationJournalSchema.safeParse(json(path))
+    : null;
   process.stdout.write(
     JSON.stringify(
       {
         project: i.project,
         origin: i.origin,
         release: installed.identity,
+        healthy,
         updatePermitted: await permission(i),
         recoveryRequired: existsSync(join(i.stateDirectory, "journal.json")),
+        recoveryMode: pending
+          ? pending.success
+            ? pending.data.phase === "activation"
+              ? "forward-only"
+              : "checkpoint-restore"
+            : "manual-diagnosis"
+          : "none",
       },
       null,
       2,
     ) + "\n",
   );
+  if (!healthy) process.exitCode = 1;
 }
 async function restoreCopy(i: Installation): Promise<void> {
   const directory = process.argv[4];
   if (!directory) fail("Supply a checkpoint directory.");
-  if (
-    i.configuration.email ||
-    i.configuration.stripe ||
-    i.configuration.storage.driver !== "local"
-  )
-    fail("Recovery copies require local storage and disabled email/Stripe.");
   if (compose(i, ["ps", "--all", "--quiet", "app"]).trim())
     fail("Restore-copy requires a fresh target with no app container.");
   await restore(i, resolve(directory), true);
+  renameSync(
+    join(i.stateDirectory, "journal.json"),
+    join(i.stateDirectory, `restored-${randomUUID()}.json`),
+  );
+  syncDirectory(i.stateDirectory);
   process.stdout.write(
     "Isolated database/file copy restored; remote references now use recovered local bytes. Original stores untouched.\n",
   );

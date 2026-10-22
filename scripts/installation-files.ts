@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, lstat, readFile } from "node:fs/promises";
+import { mkdir, readdir, lstat, readFile, statfs } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -8,6 +8,21 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import type { StorageConfiguration } from "../src/lib/config";
 import { ConfigurationError } from "../src/lib/errors";
 import type { FileReference, Snapshot } from "./operations-contract";
+
+export async function requireDiskSpace(
+  path: string,
+  bytes: number,
+): Promise<void> {
+  const filesystem = await statfs(path, { bigint: true });
+  if (
+    !Number.isSafeInteger(bytes) ||
+    bytes < 0 ||
+    filesystem.bavail * filesystem.bsize < BigInt(bytes)
+  )
+    throw new ConfigurationError(
+      "Insufficient private checkpoint/staging disk space. Free disk space before disrupting the app.",
+    );
+}
 
 export async function hashFile(path: string): Promise<string> {
   const hash = createHash("sha256");

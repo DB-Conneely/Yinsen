@@ -52,6 +52,26 @@ export type Artifacts = z.infer<typeof artifactSetSchema>;
 export type FileReference = z.infer<typeof fileSchema>;
 export type Snapshot = z.infer<typeof snapshotSchema>;
 
+const journalBase = z.object({
+  format: z.literal(1),
+  previous: artifactSetSchema,
+  checkpoint: z.string().nullable(),
+});
+export const operationJournalSchema = z.discriminatedUnion("phase", [
+  journalBase
+    .extend({
+      phase: z.enum(["checkpoint", "migration", "retention", "backup"]),
+    })
+    .strict(),
+  journalBase
+    .extend({ phase: z.literal("restore"), localCopy: z.boolean() })
+    .strict(),
+  journalBase
+    .extend({ phase: z.literal("activation"), target: artifactSetSchema })
+    .strict(),
+]);
+export type OperationJournal = z.infer<typeof operationJournalSchema>;
+
 export function sha256(bytes: string | Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
