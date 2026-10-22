@@ -4,7 +4,14 @@ A self-hosted client portal for freelancers and small agencies: one operator, cl
 
 Development is ongoing. The current runtime includes operator/client access, projects, milestones, messages, private attachments, negotiated proposals, versioned deliverables, invoices, full manual settlement, direct Stripe Checkout payments, completion/disputes/archive, operator dashboard/analytics and installation settings. Integrated verification and installation/recovery work remain in progress.
 
-## Run with Docker Compose
+## Install and operate
+
+Follow [INSTALL.md](INSTALL.md) for the reproducible, source-bound Docker package,
+fresh private installation, optional providers, exact-image qualification and
+user-controlled CI/publication. Recovery/update operations follow the recovery
+handoff. Live GitHub/publication/production/website execution remains unverified.
+
+## Source Compose development
 
 Use Docker Engine with Compose v2. From the repository root:
 

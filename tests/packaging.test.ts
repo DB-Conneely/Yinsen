@@ -13,6 +13,7 @@ describe("installed standalone commands", () => {
     mkdirSync(join(root, ".next/standalone"), { recursive: true });
     writeFileSync(join(root, ".next/static/asset.css"), "body{color:black}");
     writeFileSync(join(root, ".env"), "APP_ORIGIN=http://localhost:3000");
+    writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
     for (const name of [
       ".env",
       ".env.local",
@@ -37,6 +38,9 @@ describe("installed standalone commands", () => {
       ),
     ).toBe("body{color:black}");
     expect(readFileSync(join(root, ".env"), "utf8")).toContain("APP_ORIGIN=");
+    expect(
+      readFileSync(join(root, ".next/standalone/release.json"), "utf8"),
+    ).toBe('{"sourceRevision":null}');
     for (const name of [
       ".env",
       ".env.local",

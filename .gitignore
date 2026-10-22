@@ -8,6 +8,7 @@ node_modules/
 
 # Next.js, build outputs, compiler state and caches
 .next/
+release.json
 out/
 dist/
 build/

@@ -3,7 +3,7 @@ services:
   postgres:
     image: postgres:16.13-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
     environment:
-      POSTGRES_DB: yinsen
+      POSTGRES_DB: ${POSTGRES_DB:-yinsen}
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       MIGRATION_PASSWORD: ${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}
@@ -12,9 +12,9 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-database.sql:/docker-entrypoint-initdb.d/10-yinsen.sql:ro
+      - ./docker:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d yinsen"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -25,7 +25,7 @@ services:
       target: tools
     profiles: ["tools"]
     environment:
-      MIGRATION_DATABASE_URL: postgresql://yinsen_migrator:${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}@postgres:5432/yinsen
+      MIGRATION_DATABASE_URL: postgresql://yinsen_migrator:${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}@postgres:5432/${POSTGRES_DB:-yinsen}
       DATABASE_SSL: disable
     depends_on:
       postgres: { condition: service_healthy }
@@ -35,7 +35,7 @@ services:
       context: .
       target: runtime
     environment:
-      DATABASE_URL: postgresql://yinsen_runtime:${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}@postgres:5432/yinsen
+      DATABASE_URL: postgresql://yinsen_runtime:${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}@postgres:5432/${POSTGRES_DB:-yinsen}
       DATABASE_SSL: disable
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

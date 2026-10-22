@@ -17,6 +17,7 @@ import RootLayout from "../src/app/layout";
 import nextConfig from "../next.config";
 import { register } from "../src/instrumentation";
 import { logger, logFailure } from "../src/lib/logger";
+import { readReleaseIdentity } from "../src/lib/release";
 
 nextEnv.loadEnvConfig(process.cwd());
 const connection = databaseConnection(
@@ -93,7 +94,11 @@ describe("installed PostgreSQL foundation", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(response.headers.get("X-Request-Id")).toMatch(/^[\da-f-]{36}$/);
     expect(await response.json()).toEqual({
-      data: { status: "healthy", version: "0.1.0" },
+      data: {
+        status: "healthy",
+        version: "0.1.0",
+        release: readReleaseIdentity(),
+      },
       meta: null,
       error: null,
     });

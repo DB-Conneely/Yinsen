@@ -1,6 +1,7 @@
 .git
 .env*
 .next
+release.json
 node_modules
 .local
 .private

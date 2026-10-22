@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { checkDatabase } from "../../../lib/db/health";
 import { AppError, DatabaseError } from "../../../lib/errors";
 import { logFailure } from "../../../lib/logger";
+import { readReleaseIdentity } from "../../../lib/release";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,9 +15,10 @@ export async function GET(): Promise<Response> {
   };
   try {
     await checkDatabase();
+    const release = readReleaseIdentity();
     return Response.json(
       {
-        data: { status: "healthy", version: "0.1.0" },
+        data: { status: "healthy", version: release.version, release },
         meta: null,
         error: null,
       },

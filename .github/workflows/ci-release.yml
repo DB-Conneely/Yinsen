@@ -1,0 +1,72 @@
+name: Qualify and release
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the exact qualified images (protected release environment)
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: yinsen-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22.21.1
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run package:build
+        env:
+          RELEASE_SEQUENCE: ${{ github.run_number }}
+      - run: npm run package:qualify
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: qualified-images
+          path: |
+            .local/package/images.tar
+            .local/package/artifacts.json
+            .local/package/qualification.json
+          include-hidden-files: true
+          retention-days: 7
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    needs: qualify
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22.21.1
+      - run: npm ci
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: qualified-images
+          path: .local/package
+      - run: docker load --input .local/package/images.tar
+      - run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: npm run package:publish
+      - run: gh release create "build-${GITHUB_RUN_NUMBER}" .local/package/release.json --target "$GITHUB_SHA" --title "Yinsen build ${GITHUB_RUN_NUMBER}" --notes "Qualified runtime and tools; use the immutable references in release.json."
+        env:
+          GH_TOKEN: ${{ github.token }}

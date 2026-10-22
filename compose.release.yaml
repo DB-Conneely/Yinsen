@@ -1,0 +1,10 @@
+# Requires Docker Compose 2.24.4+. Never rebuild a qualified artifact on target.
+services:
+  app:
+    build: !reset null
+    image: ${YINSEN_RUNTIME_IMAGE:?Set the qualified runtime image digest or local image ID}
+    pull_policy: never
+  migrate:
+    build: !reset null
+    image: ${YINSEN_TOOLS_IMAGE:?Set the matching tools image digest or local image ID}
+    pull_policy: never

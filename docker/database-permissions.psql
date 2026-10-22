@@ -1,0 +1,9 @@
+-- Per-database grants are also used by the isolated release qualifier.
+ALTER DATABASE :"DBNAME" OWNER TO yinsen_migrator;
+REVOKE ALL ON DATABASE :"DBNAME" FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"DBNAME" TO yinsen_runtime;
+ALTER SCHEMA public OWNER TO yinsen_migrator;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO yinsen_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE yinsen_migrator IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO yinsen_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE yinsen_migrator IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO yinsen_runtime;
