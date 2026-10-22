@@ -68,6 +68,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - run: npm run package:publish
-      - run: gh release create "build-${GITHUB_RUN_NUMBER}" .local/package/release.json --target "$GITHUB_SHA" --title "Yinsen build ${GITHUB_RUN_NUMBER}" --notes "Qualified runtime and tools; use the immutable references in release.json."
+      - run: gh release create "build-${GITHUB_RUN_NUMBER}" .local/package/release.json .local/package/release-qualification.json --target "$GITHUB_SHA" --title "Yinsen build ${GITHUB_RUN_NUMBER}" --notes "Qualified runtime and tools; use the immutable references in release.json and its matching qualification receipt."
         env:
           GH_TOKEN: ${{ github.token }}

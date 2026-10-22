@@ -12,8 +12,8 @@
     "start": "tsx scripts/start.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "format": "prettier --write src scripts tests '*.{json,ts,mjs,yaml}' README.md INSTALL.md '.github/workflows/*.yml'",
-    "format:check": "prettier --check src scripts tests '*.{json,ts,mjs,yaml}' README.md INSTALL.md '.github/workflows/*.yml'",
+    "format": "prettier --write src scripts tests '*.{json,ts,mjs,yaml}' '*.md' '.github/workflows/*.yml'",
+    "format:check": "prettier --check src scripts tests '*.{json,ts,mjs,yaml}' '*.md' '.github/workflows/*.yml'",
     "test": "vitest run",
     "test:http": "tsx tests/http.ts",
     "test:access": "tsx tests/access-http.ts",
@@ -35,7 +35,8 @@
     "package:verify": "tsx scripts/package.ts verify",
     "package:publish": "tsx scripts/package.ts publish",
     "package:qualify": "tsx scripts/qualify.ts",
-    "test:browser": "tsx tests/package-browser.ts"
+    "test:browser": "tsx tests/package-browser.ts",
+    "installation": "tsx scripts/installation.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1152.0",

@@ -1,0 +1,38 @@
+name: Update enrolled installation
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Approved build-N release tag
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: yinsen-enrolled-installation
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    environment: installation
+    runs-on: [self-hosted, linux, x64, yinsen-target]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22.21.1
+      - run: npm ci
+      - name: Retrieve operator-approved immutable release
+        run: |
+          mkdir -p .local/approved-release
+          gh release download "$APPROVED_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern release.json --pattern release-qualification.json --dir .local/approved-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_RELEASE: ${{ inputs.release }}
+      - name: Run the same target-local operator command
+        run: npm run installation -- update "$INSTALLATION_INPUT" .local/approved-release/release.json .local/approved-release/release-qualification.json
+        env:
+          INSTALLATION_INPUT: ${{ vars.YINSEN_INSTALLATION }}

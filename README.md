@@ -8,8 +8,11 @@ Development is ongoing. The current runtime includes operator/client access, pro
 
 Follow [INSTALL.md](INSTALL.md) for the reproducible, source-bound Docker package,
 fresh private installation, optional providers, exact-image qualification and
-user-controlled CI/publication. Recovery/update operations follow the recovery
-handoff. Live GitHub/publication/production/website execution remains unverified.
+user-controlled CI/publication. [OPERATIONS.md](OPERATIONS.md) covers consistent
+database/file backup, isolated restore, encrypted configuration, opt-in update
+and failure recovery. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[SUPPORT.md](SUPPORT.md). Live GitHub/publication/production/website execution
+remains unverified.
 
 ## Source Compose development
 

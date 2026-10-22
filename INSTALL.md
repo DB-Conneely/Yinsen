@@ -135,8 +135,8 @@ original stores accessible. Logos are public; private files remain authorized.
 invoicing defaults, colour/typography/density/corners and readable light/dark
 surfaces. Browser theme preference is separate. Issued invoices retain historical
 identity, appearance and numbering. Automatic-update permission defaults off;
-saving it starts no installation or restart. Recovery/update operations are
-documented with their tooling during the recovery handoff.
+saving it starts no installation or restart. Follow [OPERATIONS.md](OPERATIONS.md)
+for the actual backup/restore, secret-manager and target-local update commands.
 
 ## Qualify the exact distribution
 

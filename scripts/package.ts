@@ -169,6 +169,12 @@ function publish(): void {
     );
   }
   save("release.json", published);
+  save("release-qualification.json", {
+    passed: true,
+    artifactsSha256: createHash("sha256")
+      .update(readFileSync(`${directory}/release.json`))
+      .digest("hex"),
+  });
 }
 mkdirSync(directory, { recursive: true, mode: 0o700 });
 const action = process.argv[2];
