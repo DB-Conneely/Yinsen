@@ -14,6 +14,13 @@ and failure recovery. See [CONTRIBUTING.md](CONTRIBUTING.md) and
 [SUPPORT.md](SUPPORT.md). Live GitHub/publication/production/website execution
 remains unverified.
 
+Actual isolated installation screens with synthetic example data:
+
+![Operator overview in light mode](screenshots/operator-desktop.png)
+
+[Client deliverables on desktop](screenshots/client-deliverables-desktop.png) ·
+[Client deliverables on mobile in dark mode](screenshots/client-deliverables-mobile-dark.png)
+
 ## Source Compose development
 
 Use Docker Engine with Compose v2. From the repository root:

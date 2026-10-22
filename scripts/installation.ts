@@ -161,52 +161,63 @@ function load(path: string): Installation {
   const temporary = mkdtempSync(join(runtime, "yinsen-operations-"));
   const environmentFile = join(temporary, "installation.env");
   try {
-    const credential = execFileSync(
-      "systemd-creds",
-      [
-        "decrypt",
-        "--user",
-        "--refuse-null",
-        "--name=yinsen-installation",
-        settings.credentialFile,
-        "-",
-      ],
-      { stdio: "pipe" },
-    );
-    writeFileSync(environmentFile, credential, { mode: 0o600, flag: "wx" });
-    privateFile(environmentFile);
+    decryptCredential(settings.credentialFile, environmentFile);
     const environment = parseEnv(readFileSync(environmentFile, "utf8"));
-    if (environment.COMPOSE_PROJECT_NAME !== settings.project)
-      fail("Credential and installation project disagree.");
-    const database = environment.POSTGRES_DB ?? "yinsen",
-      postgresPort = Number(environment.POSTGRES_PORT ?? "55432");
-    if (
-      !/^[a-z][a-z0-9_]{0,62}$/.test(database) ||
-      !Number.isInteger(postgresPort) ||
-      postgresPort < 1024 ||
-      postgresPort > 65535
-    )
-      fail("Invalid private database identity or port.");
-    const databaseUrl = `postgresql://yinsen_runtime:${encodeURIComponent(environment.RUNTIME_PASSWORD ?? "")}@127.0.0.1:${postgresPort}/${database}`;
-    const configuration = readConfiguration({
-      ...environment,
-      DATABASE_URL: databaseUrl,
-      DATABASE_SSL: "disable",
-    });
-    return {
-      ...settings,
-      temporary,
-      environmentFile,
-      environment,
-      configuration,
-      database,
-      postgresPort,
-      origin: configuration.origin,
-    };
+    return bindInstallation(settings, temporary, environmentFile, environment);
   } catch (error: unknown) {
     rmSync(temporary, { recursive: true });
     throw error;
   }
+}
+function decryptCredential(path: string, destination: string): void {
+  const credential = execFileSync(
+    "systemd-creds",
+    [
+      "decrypt",
+      "--user",
+      "--refuse-null",
+      "--name=yinsen-installation",
+      path,
+      "-",
+    ],
+    { stdio: "pipe" },
+  );
+  writeFileSync(destination, credential, { mode: 0o600, flag: "wx" });
+  privateFile(destination);
+}
+function bindInstallation(
+  settings: ReturnType<typeof installationSchema.parse>,
+  temporary: string,
+  environmentFile: string,
+  environment: Installation["environment"],
+): Installation {
+  if (environment.COMPOSE_PROJECT_NAME !== settings.project)
+    fail("Credential and installation project disagree.");
+  const database = environment.POSTGRES_DB ?? "yinsen",
+    postgresPort = Number(environment.POSTGRES_PORT ?? "55432");
+  if (
+    !/^[a-z][a-z0-9_]{0,62}$/.test(database) ||
+    !Number.isInteger(postgresPort) ||
+    postgresPort < 1024 ||
+    postgresPort > 65535
+  )
+    fail("Invalid private database identity or port.");
+  const databaseUrl = `postgresql://yinsen_runtime:${encodeURIComponent(environment.RUNTIME_PASSWORD ?? "")}@127.0.0.1:${postgresPort}/${database}`;
+  const configuration = readConfiguration({
+    ...environment,
+    DATABASE_URL: databaseUrl,
+    DATABASE_SSL: "disable",
+  });
+  return {
+    ...settings,
+    temporary,
+    environmentFile,
+    environment,
+    configuration,
+    database,
+    postgresPort,
+    origin: configuration.origin,
+  };
 }
 async function database<T>(
   i: Installation,
@@ -299,21 +310,21 @@ async function health(i: Installation): Promise<unknown> {
     fail("Installed health response lacks a release identity.");
   return body.data.release;
 }
-async function current(i: Installation): Promise<Artifacts> {
+function installedArtifacts(i: Installation): Artifacts {
   const id = run(["inspect", "--format", "{{.Image}}", container(i)]).trim();
   const state = join(i.stateDirectory, "active.json");
   if (existsSync(state)) {
     const artifacts = artifactSetSchema.parse(json(state));
     if (
       resolveImage(artifacts.runtime.image) !== id ||
-      JSON.stringify(await health(i)) !== JSON.stringify(artifacts.identity)
+      JSON.stringify(imageIdentity(id)) !== JSON.stringify(artifacts.identity)
     )
       fail(
-        "Actual installed image/health differs from active receipt. Resolve before updating.",
+        "Actual installed image differs from active receipt. Resolve before updating.",
       );
     return artifacts;
   }
-  const identity = releaseIdentitySchema.parse(await health(i));
+  const identity = releaseIdentitySchema.parse(imageIdentity(id));
   const tools = i.environment.YINSEN_TOOLS_IMAGE;
   if (!tools) fail("The installed matching tools image is required.");
   const artifacts = artifactSetSchema.parse({
@@ -323,6 +334,12 @@ async function current(i: Installation): Promise<Artifacts> {
     tools: { image: tools, id: resolveImage(tools) },
   });
   verifyArtifacts(artifacts);
+  return artifacts;
+}
+async function current(i: Installation): Promise<Artifacts> {
+  const artifacts = installedArtifacts(i);
+  if (JSON.stringify(await health(i)) !== JSON.stringify(artifacts.identity))
+    fail("Installed health identity differs from actual image.");
   return artifacts;
 }
 function select(i: Installation, artifacts: Artifacts): void {
@@ -475,6 +492,21 @@ function composeArguments(i: Installation): string[] {
     join(root, "compose.release.yaml"),
   ];
 }
+function psql(i: Installation, args: string[]): string {
+  return compose(i, [
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-U",
+    "postgres",
+    "-d",
+    i.database,
+    "-v",
+    "ON_ERROR_STOP=1",
+    ...args,
+  ]);
+}
 async function checkpoint(
   i: Installation,
   artifacts: Artifacts,
@@ -508,6 +540,14 @@ async function checkpoint(
     inventory: await inventory(join(path, "files")),
     databaseSha256: await hashFile(join(path, "database.dump")),
   };
+  await sealSnapshot(i, path, snapshot);
+  return path;
+}
+async function sealSnapshot(
+  i: Installation,
+  path: string,
+  snapshot: Snapshot,
+): Promise<void> {
   execFileSync(
     "systemd-creds",
     [
@@ -522,7 +562,6 @@ async function checkpoint(
   chmodSync(join(path, "installation.cred"), 0o600);
   await verifySnapshot(path, snapshot);
   save(join(path, "snapshot.json"), snapshot);
-  return path;
 }
 function journal(i: Installation, value: Journal): void {
   save(join(i.stateDirectory, "journal.json"), value);
@@ -554,31 +593,8 @@ function restoreDatabase(i: Installation, directory: string): void {
   } finally {
     closeSync(fd);
   }
-  compose(i, [
-    "exec",
-    "-T",
-    "postgres",
-    "psql",
-    "-U",
-    "postgres",
-    "-d",
-    i.database,
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-f",
-    "/docker-entrypoint-initdb.d/database-permissions.psql",
-  ]);
-  compose(i, [
-    "exec",
-    "-T",
-    "postgres",
-    "psql",
-    "-U",
-    "postgres",
-    "-d",
-    i.database,
-    "-v",
-    "ON_ERROR_STOP=1",
+  psql(i, ["-f", "/docker-entrypoint-initdb.d/database-permissions.psql"]);
+  psql(i, [
     "-c",
     "grant usage on schema drizzle to yinsen_runtime; grant select on drizzle.__drizzle_migrations to yinsen_runtime;",
   ]);
@@ -605,6 +621,18 @@ async function restoreFiles(
       { force: false, errorOnExist: true },
     );
   }
+  attachRestoredFiles(i, staging, snapshot.artifacts.tools.image);
+  if (localCopy)
+    psql(i, [
+      "-c",
+      "begin; update branding_assets set driver='local' where driver='s3'; update message_attachments set driver='local' where driver='s3'; update deliverables set driver='local' where driver='s3'; commit;",
+    ]);
+}
+function attachRestoredFiles(
+  i: Installation,
+  staging: string,
+  tools: string,
+): void {
   run(["cp", `${staging}/.`, `${container(i)}:/app/data/uploads`]);
   const volume = run([
     "inspect",
@@ -623,26 +651,11 @@ async function restoreFiles(
     `${volume}:/files`,
     "--entrypoint",
     "chown",
-    snapshot.artifacts.tools.image,
+    tools,
     "-R",
     "1000:1000",
     "/files",
   ]);
-  if (localCopy)
-    compose(i, [
-      "exec",
-      "-T",
-      "postgres",
-      "psql",
-      "-U",
-      "postgres",
-      "-d",
-      i.database,
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-c",
-      "begin; update branding_assets set driver='local' where driver='s3'; update message_attachments set driver='local' where driver='s3'; update deliverables set driver='local' where driver='s3'; commit;",
-    ]);
 }
 async function restore(
   i: Installation,
@@ -749,6 +762,13 @@ async function update(
     return;
   }
   journal(i, { format: 1, previous, checkpoint: null, phase: "checkpoint" });
+  await replace(i, previous, approved);
+}
+async function replace(
+  i: Installation,
+  previous: Artifacts,
+  approved: Artifacts,
+): Promise<void> {
   try {
     const path = await checkpoint(i, previous);
     journal(i, { format: 1, previous, checkpoint: path, phase: "migration" });
@@ -758,20 +778,7 @@ async function update(
     journal(i, { format: 1, previous, checkpoint: path, phase: "readiness" });
     await ready(i, approved);
     await retained(i, snapshotSchema.parse(json(join(path, "snapshot.json"))));
-    save(join(i.stateDirectory, "active.json"), approved);
-    save(join(i.stateDirectory, "last-update.json"), {
-      updated: true,
-      at: new Date().toISOString(),
-      checkpoint: path,
-      artifacts: approved,
-    });
-    renameSync(
-      join(i.stateDirectory, "journal.json"),
-      join(i.stateDirectory, `completed-${randomUUID()}.json`),
-    );
-    process.stdout.write(
-      "Qualified release installed; exact serving identity and schema verified.\n",
-    );
+    completeUpdate(i, approved, path);
   } catch {
     try {
       await recover(i);
@@ -785,6 +792,45 @@ async function update(
     }
     process.exitCode = 1;
   }
+}
+function completeUpdate(
+  i: Installation,
+  artifacts: Artifacts,
+  checkpoint: string,
+): void {
+  save(join(i.stateDirectory, "active.json"), artifacts);
+  save(join(i.stateDirectory, "last-update.json"), {
+    updated: true,
+    at: new Date().toISOString(),
+    checkpoint,
+    artifacts,
+  });
+  renameSync(
+    join(i.stateDirectory, "journal.json"),
+    join(i.stateDirectory, `completed-${randomUUID()}.json`),
+  );
+  process.stdout.write(
+    "Qualified release installed; exact serving identity and schema verified.\n",
+  );
+}
+async function restart(i: Installation): Promise<void> {
+  if (existsSync(join(i.stateDirectory, "journal.json")))
+    fail("Recover interrupted operation before restarting.");
+  const installed = installedArtifacts(i);
+  select(i, installed);
+  compose(i, [
+    "up",
+    "-d",
+    "--force-recreate",
+    "--wait",
+    "--wait-timeout",
+    "90",
+    "app",
+  ]);
+  await ready(i, installed);
+  process.stdout.write(
+    "Current exact image restarted with refreshed private configuration; persistent data retained.\n",
+  );
 }
 async function backup(i: Installation): Promise<void> {
   if (existsSync(join(i.stateDirectory, "journal.json")))
@@ -805,22 +851,9 @@ async function backup(i: Installation): Promise<void> {
   }
 }
 async function main(i: Installation): Promise<void> {
-  if (action === "status") {
-    const installed = await current(i);
-    process.stdout.write(
-      JSON.stringify(
-        {
-          project: i.project,
-          origin: i.origin,
-          release: installed.identity,
-          updatePermitted: await permission(i),
-          recoveryRequired: existsSync(join(i.stateDirectory, "journal.json")),
-        },
-        null,
-        2,
-      ) + "\n",
-    );
-  } else if (action === "backup") await backup(i);
+  if (action === "status") await status(i);
+  else if (action === "backup") await backup(i);
+  else if (action === "restart") await restart(i);
   else if (action === "update") {
     const release = process.argv[4],
       receipt = process.argv[5];
@@ -828,25 +861,43 @@ async function main(i: Installation): Promise<void> {
       fail("Supply approved manifest and matching qualification paths.");
     await update(i, resolve(release), resolve(receipt));
   } else if (action === "recover") await recover(i);
-  else if (action === "restore-copy") {
-    const directory = process.argv[4];
-    if (!directory) fail("Supply a checkpoint directory.");
-    if (
-      i.configuration.email ||
-      i.configuration.stripe ||
-      i.configuration.storage.driver !== "local"
-    )
-      fail("Recovery copies require local storage and disabled email/Stripe.");
-    if (compose(i, ["ps", "--all", "--quiet", "app"]).trim())
-      fail("Restore-copy requires a fresh target with no app container.");
-    await restore(i, resolve(directory), true);
-    process.stdout.write(
-      "Isolated database/file copy restored; remote references now use recovered local bytes. Original stores untouched.\n",
-    );
-  } else
+  else if (action === "restore-copy") await restoreCopy(i);
+  else
     fail(
-      "Use status, backup, update, recover or restore-copy with a private installation JSON.",
+      "Use status, restart, backup, update, recover or restore-copy with a private installation JSON.",
     );
+}
+async function status(i: Installation): Promise<void> {
+  const installed = await current(i);
+  process.stdout.write(
+    JSON.stringify(
+      {
+        project: i.project,
+        origin: i.origin,
+        release: installed.identity,
+        updatePermitted: await permission(i),
+        recoveryRequired: existsSync(join(i.stateDirectory, "journal.json")),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+}
+async function restoreCopy(i: Installation): Promise<void> {
+  const directory = process.argv[4];
+  if (!directory) fail("Supply a checkpoint directory.");
+  if (
+    i.configuration.email ||
+    i.configuration.stripe ||
+    i.configuration.storage.driver !== "local"
+  )
+    fail("Recovery copies require local storage and disabled email/Stripe.");
+  if (compose(i, ["ps", "--all", "--quiet", "app"]).trim())
+    fail("Restore-copy requires a fresh target with no app container.");
+  await restore(i, resolve(directory), true);
+  process.stdout.write(
+    "Isolated database/file copy restored; remote references now use recovered local bytes. Original stores untouched.\n",
+  );
 }
 let installation: Installation | undefined;
 let lock: number | undefined;

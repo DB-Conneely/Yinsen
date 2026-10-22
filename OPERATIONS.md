@@ -60,6 +60,12 @@ npm run installation -- status /private/yinsen-personal/installation.json
 ```
 
 Status verifies the actual serving image, health identity and installed inputs.
+After a deliberate environment change, reseal the private credential and run
+`npm run installation -- restart /private/yinsen-personal/installation.json`.
+This recreates the same exact image with refreshed configuration; it does not
+change DB role passwords or move stored files. Partial provider configuration is
+rejected before recreation. Check the configured provider and real journeys
+afterward; correct an unavailable provider/configuration before restarting again.
 After replacement, state stores the selected image references without changing
 your private secrets. Always use this same state directory for manual and CI
 calls; native `flock` serializes every operation. A competing invocation exits

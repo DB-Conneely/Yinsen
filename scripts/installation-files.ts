@@ -69,21 +69,7 @@ export async function copyRemoteFiles(
     throw new ConfigurationError(
       "Retained S3 files require the original private storage configuration.",
     );
-  const client = new S3Client({
-    region: config.region,
-    ...(config.endpoint
-      ? { endpoint: config.endpoint, forcePathStyle: true }
-      : {}),
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    responseChecksumValidation: "WHEN_REQUIRED",
-    retryMode: "standard",
-    maxAttempts: 2,
-    requestHandler: { connectionTimeout: 5000, requestTimeout: 60000 },
-  });
+  const client = remoteClient(config);
   try {
     for (const file of remote) {
       const path = safePath(directory, `objects/${file.key}`);
@@ -106,6 +92,25 @@ export async function copyRemoteFiles(
   } finally {
     client.destroy();
   }
+}
+function remoteClient(
+  config: Extract<StorageConfiguration, { driver: "s3" }>,
+): S3Client {
+  return new S3Client({
+    region: config.region,
+    ...(config.endpoint
+      ? { endpoint: config.endpoint, forcePathStyle: true }
+      : {}),
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
+    retryMode: "standard",
+    maxAttempts: 2,
+    requestHandler: { connectionTimeout: 5000, requestTimeout: 60000 },
+  });
 }
 
 export async function verifySnapshot(
