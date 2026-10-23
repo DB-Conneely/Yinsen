@@ -1,16 +1,59 @@
 "use client";
-import { useEffect, useState, type ReactElement, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 
-export function ProjectLive({
+export const MessageRefreshContext = createContext({
+  refreshing: false,
+  setDraft: (_value: boolean): void => undefined,
+});
+
+function useDraftSafeRefresh(): {
+  refreshing: boolean;
+  setDraft: (value: boolean) => void;
+  refresh: () => void;
+} {
+  const router = useRouter();
+  const [refreshing, startTransition] = useTransition();
+  const draft = useRef(false);
+  const queued = useRef(false);
+  const refresh = useCallback(() => {
+    queued.current = true;
+    if (draft.current || !navigator.onLine) return;
+    queued.current = false;
+    startTransition(() => router.refresh());
+  }, [router]);
+  const setDraft = useCallback(
+    (value: boolean) => {
+      draft.current = value;
+      if (!value && queued.current) refresh();
+    },
+    [refresh],
+  );
+  useEffect(() => {
+    window.addEventListener("online", refresh);
+    return () => window.removeEventListener("online", refresh);
+  }, [refresh]);
+  return { refreshing, setDraft, refresh };
+}
+
+function useProjectConnection({
   projectId,
   clientId,
-  children,
+  refresh,
 }: {
   projectId?: string;
   clientId?: string;
-  children: ReactNode;
-}): ReactElement {
+  refresh: () => void;
+}): string {
   const router = useRouter();
   const [connection, setConnection] = useState("");
   useEffect(() => {
@@ -19,11 +62,10 @@ export function ProjectLive({
     );
     source.onopen = (): void => {
       setConnection("");
-      router.refresh();
     };
     source.addEventListener("refresh", () => {
       window.dispatchEvent(new Event("yinsen:refresh"));
-      router.refresh();
+      refresh();
     });
     source.addEventListener("revoked", () => {
       setConnection("Access changed. Return to your workspace to continue.");
@@ -42,10 +84,24 @@ export function ProjectLive({
     return () => {
       source.close();
     };
-  }, [projectId, clientId, router]);
+  }, [projectId, clientId, router, refresh]);
+  return connection;
+}
+
+export function ProjectLive({
+  projectId,
+  clientId,
+  children,
+}: {
+  projectId?: string;
+  clientId?: string;
+  children: ReactNode;
+}): ReactElement {
+  const { refreshing, setDraft, refresh } = useDraftSafeRefresh();
+  const connection = useProjectConnection({ projectId, clientId, refresh });
   const visible = !connection.startsWith("Access changed.");
   return (
-    <>
+    <MessageRefreshContext value={{ refreshing, setDraft }}>
       {connection && (
         <p className="live-status" role="status">
           {connection}
@@ -58,6 +114,6 @@ export function ProjectLive({
           Reload workspace
         </button>
       )}
-    </>
+    </MessageRefreshContext>
   );
 }

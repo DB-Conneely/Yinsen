@@ -1,6 +1,7 @@
 "use client";
 import {
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -18,6 +19,7 @@ import {
 } from "../lib/messages/proposal-validators";
 import { ProposalCard } from "./proposal-card";
 import { ProposalEditor } from "./proposal-editor";
+import { MessageRefreshContext } from "./project-live";
 
 const pageSchema = z.object({
   data: z
@@ -209,6 +211,12 @@ function MessageComposer({
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const { refreshing, setDraft } = useContext(MessageRefreshContext);
+  // A failed background RSC refresh can navigate the document. Keep drafts out of that race.
+  useLayoutEffect(() => {
+    setDraft(Boolean(body || files.length || pending || focused));
+  }, [body, files.length, pending, focused, setDraft]);
   const requestId = useRef("");
   const picker = useRef<HTMLInputElement>(null);
   function changed(): void {
@@ -259,6 +267,11 @@ function MessageComposer({
       className="message-composer"
       aria-label="Send a message"
       aria-busy={pending}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setFocused(false);
+      }}
       onSubmit={(event) => {
         void submit(event);
       }}
@@ -269,7 +282,7 @@ function MessageComposer({
           placeholder="Write a message…"
           maxLength={4000}
           value={body}
-          disabled={pending}
+          disabled={pending || refreshing}
           onChange={(event) => {
             changed();
             setBody(event.target.value);
@@ -283,7 +296,7 @@ function MessageComposer({
             ref={picker}
             type="file"
             multiple
-            disabled={pending}
+            disabled={pending || refreshing}
             accept=".txt,.md,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.zip,.docx,.xlsx,.pptx"
             onChange={(event) => {
               changed();
@@ -292,7 +305,7 @@ function MessageComposer({
             }}
           />
         </label>
-        <button disabled={pending}>
+        <button disabled={pending || refreshing}>
           {pending ? "Sending…" : "Send message"}
           <span aria-hidden="true">↗</span>
         </button>
