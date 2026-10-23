@@ -258,9 +258,23 @@ describe("consumed installation settings", () => {
     const saved = await getInvoice(first.id, actor);
     expect(saved).toEqual(sent);
     expect(saved.currency).toBe("EUR");
-    const html = renderToStaticMarkup(InvoicePreview({ invoice: saved }));
+    const html = renderToStaticMarkup(
+      InvoicePreview({
+        invoice: saved,
+        appearance: {
+          ...defaultAppearance,
+          typography: "humanist",
+          darkBackground: "#09090a",
+          darkSurface: "#19191a",
+        },
+      }),
+    );
     expect(html).toContain(`--brand-colour:${sent.brandColour}`);
     expect(html).toContain(palettes.warm.surface);
+    expect(html).toContain("--dark-canvas:#09090a");
+    expect(html).toContain("--dark-surface:#19191a");
+    expect(html).toContain("--font-display:var(--font-source-serif");
+    expect(saved).toEqual(sent);
     expect((await getBranding())?.defaultCurrency).toBe("JPY");
     const next = await create(),
       nextSent = await sendInvoice(

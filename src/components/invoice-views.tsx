@@ -12,7 +12,11 @@ import {
 } from "../lib/invoices/queries";
 import { invoiceStatus } from "../lib/invoices/validation";
 import { getBranding, getOperatorSettings } from "../lib/settings";
-import { appearanceStyle, legacyAppearance } from "../lib/appearance";
+import {
+  appearanceStyle,
+  legacyAppearance,
+  type Appearance,
+} from "../lib/appearance";
 import { readConfiguration } from "../lib/config";
 import { formatBudget } from "../lib/money";
 import { ProjectLive } from "./project-live";
@@ -169,8 +173,10 @@ export async function InvoiceList({
 
 export function InvoicePreview({
   invoice,
+  appearance,
 }: {
   invoice: InvoiceDetail;
+  appearance: Appearance;
 }): ReactElement {
   return (
     <article
@@ -179,7 +185,15 @@ export function InvoicePreview({
       style={
         {
           ...appearanceStyle(
-            invoice.issuerDetails ?? legacyAppearance,
+            {
+              ...(invoice.issuerDetails ?? legacyAppearance),
+              lightPalette: appearance.lightPalette,
+              darkPalette: appearance.darkPalette,
+              lightBackground: appearance.lightBackground,
+              lightSurface: appearance.lightSurface,
+              darkBackground: appearance.darkBackground,
+              darkSurface: appearance.darkSurface,
+            },
             invoice.brandColour,
           ),
           "--brand-colour": invoice.brandColour,
@@ -313,6 +327,7 @@ export async function InvoiceWorkspace({
   actor: ProjectActor;
 }): Promise<ReactElement> {
   const invoice = await detail(id, actor);
+  const appearance = (await getBranding()) ?? legacyAppearance;
   return (
     <ProjectLive>
       <div className="page-heading">
@@ -343,7 +358,7 @@ export async function InvoiceWorkspace({
             />
           )}
       </div>
-      <InvoicePreview invoice={invoice} />
+      <InvoicePreview invoice={invoice} appearance={appearance} />
       {actor.role === "operator" &&
         (await invoiceAttempts(getSql(), invoice.id)).map((attempt) => (
           <section className="card invoice-payment-record" key={attempt.id}>
