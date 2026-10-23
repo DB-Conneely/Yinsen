@@ -38,6 +38,8 @@ export function SettingsForm({
     const form = event.currentTarget,
       data = new FormData(form);
     setState({ status: "pending", message: "Saving…" });
+    const rotating = path === "/api/account/password";
+    if (rotating) window.dispatchEvent(new Event("yinsen:session-changing"));
     try {
       await clientRequest(path, method, values(data), z.unknown());
       setState({ status: "saved", message: success });
@@ -60,6 +62,8 @@ export function SettingsForm({
             ? failure.message
             : "Unable to save. Please retry.",
       });
+    } finally {
+      if (rotating) window.dispatchEvent(new Event("yinsen:session-changed"));
     }
   }
   return (

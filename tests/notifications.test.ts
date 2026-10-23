@@ -41,6 +41,43 @@ afterEach(() => {
 });
 
 describe("message notification response ordering", () => {
+  it("retires the old stream during rotation, ignoring its queued revocation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(summary(0)));
+    vi.stubGlobal("EventSource", NotificationSource);
+    const assign = vi.fn(),
+      events = new EventTarget();
+    vi.stubGlobal("window", Object.assign(events, { location: { assign } }));
+    MessageNotifications({ role: "operator" });
+    const cleanup = observed.effect?.();
+    events.dispatchEvent(new Event("yinsen:session-changing"));
+    NotificationSource.current.dispatchEvent(new Event("revoked"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(assign).not.toHaveBeenCalled();
+    events.dispatchEvent(new Event("yinsen:session-changed"));
+    expect(observed.updates.some((value) => typeof value === "function")).toBe(
+      true,
+    );
+    if (typeof cleanup === "function") cleanup();
+  });
+
+  it("still redirects an actually revoked session and a denied replacement stream", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+    );
+    vi.stubGlobal("EventSource", NotificationSource);
+    const assign = vi.fn(),
+      events = new EventTarget();
+    vi.stubGlobal("window", Object.assign(events, { location: { assign } }));
+    MessageNotifications({ role: "operator" });
+    const cleanup = observed.effect?.();
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/login"));
+    assign.mockClear();
+    NotificationSource.current.dispatchEvent(new Event("revoked"));
+    expect(assign).toHaveBeenCalledWith("/login");
+    if (typeof cleanup === "function") cleanup();
+  });
+
   it.each(["success", "failure", "unavailable", "revoked"])(
     "ignores an obsolete %s after a newer authoritative refresh",
     async (outcome) => {

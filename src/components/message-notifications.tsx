@@ -34,6 +34,7 @@ export function MessageNotifications({
   }>({ total: 0, conversations: [] });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [sessionVersion, setSessionVersion] = useState(0);
   useEffect(() => {
     let active = true;
     let generation = 0;
@@ -42,6 +43,13 @@ export function MessageNotifications({
       const request = ++generation;
       try {
         const response = await fetch("/api/messages", { cache: "no-store" });
+        if (response.status === 401) {
+          if (active && request === generation)
+            window.location.assign(
+              role === "operator" ? "/login" : "/portal/login",
+            );
+          return;
+        }
         if (!response.ok)
           throw new AppError(
             response.status,
@@ -63,18 +71,21 @@ export function MessageNotifications({
     };
     const source = new EventSource("/api/events");
     const changed = (): void => {
+      if (!active) return;
       void refresh();
       window.dispatchEvent(new Event("yinsen:refresh"));
     };
     source.addEventListener("refresh", changed);
     source.onopen = changed;
     source.addEventListener("revoked", () => {
+      if (!active) return;
       generation++;
       setSummary({ total: 0, conversations: [] });
       source.close();
       window.location.assign(role === "operator" ? "/login" : "/portal/login");
     });
     source.addEventListener("unavailable", () => {
+      if (!active) return;
       generation++;
       setError("Message notifications unavailable. Refresh to retry.");
       source.close();
@@ -82,6 +93,15 @@ export function MessageNotifications({
     const read = (): void => {
       void refresh();
     };
+    // The old stream owns the old token; retire it before password rotation can commit.
+    const changing = (): void => {
+      active = false;
+      generation++;
+      source.close();
+    };
+    const rotated = (): void => setSessionVersion((version) => version + 1);
+    window.addEventListener("yinsen:session-changing", changing);
+    window.addEventListener("yinsen:session-changed", rotated);
     window.addEventListener("yinsen:unread", read);
     void refresh();
     return () => {
@@ -89,8 +109,10 @@ export function MessageNotifications({
       generation++;
       source.close();
       window.removeEventListener("yinsen:unread", read);
+      window.removeEventListener("yinsen:session-changing", changing);
+      window.removeEventListener("yinsen:session-changed", rotated);
     };
-  }, [role]);
+  }, [role, sessionVersion]);
   const unread = summary.conversations.filter((item) => item.unread > 0);
   return (
     <div className="message-notifications">
