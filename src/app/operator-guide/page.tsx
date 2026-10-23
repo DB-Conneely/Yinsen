@@ -17,7 +17,7 @@ export default async function OperatorGuide(): Promise<ReactElement> {
     branding = null;
   }
   const guide = (
-    <main className="card" id="main-content">
+    <main className="card operator-guide" id="main-content">
       <div className="setup-toolbar">
         <Link href="/">Your portal</Link>
         {!branding && <ThemeToggle />}

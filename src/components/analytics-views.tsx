@@ -257,7 +257,10 @@ function DashboardStats({
   return (
     <div className="overview-stats">
       <Link href="/dashboard/analytics" className="card overview-stat">
-        <span className="eyebrow">Revenue this month ↗</span>
+        <span className="eyebrow">
+          <span>Revenue this month</span>
+          <span aria-hidden="true">↗</span>
+        </span>
         {s.revenue.currencies.length ? (
           s.revenue.currencies.map((r) => (
             <span className="overview-money" key={r.currency}>
@@ -274,7 +277,10 @@ function DashboardStats({
         <small>Full receipts · UTC calendar month</small>
       </Link>
       <Link href="/dashboard/invoices" className="card overview-stat">
-        <span className="eyebrow">Outstanding now ↗</span>
+        <span className="eyebrow">
+          <span>Outstanding now</span>
+          <span aria-hidden="true">↗</span>
+        </span>
         {s.revenue.currencies.length ? (
           s.revenue.currencies.map((r) => (
             <span className="overview-money" key={r.currency}>
@@ -292,12 +298,18 @@ function DashboardStats({
         href="/dashboard/projects?status=active"
         className="card overview-stat"
       >
-        <span className="eyebrow">Active projects ↗</span>
+        <span className="eyebrow">
+          <span>Active projects</span>
+          <span aria-hidden="true">↗</span>
+        </span>
         <strong className="stat-number">{s.overview.activeProjects}</strong>
         <small>Projects currently in progress</small>
       </Link>
       <a href="#needs-attention" className="card overview-stat">
-        <span className="eyebrow">Unread messages ↓</span>
+        <span className="eyebrow">
+          <span>Unread messages</span>
+          <span aria-hidden="true">↓</span>
+        </span>
         <strong className="stat-number">{s.overview.unread.total}</strong>
         <small>Across current conversations</small>
       </a>
@@ -438,7 +450,7 @@ function ActiveProjects({
     .filter((p) => p.status === "active")
     .slice(0, 5);
   return (
-    <section className="card">
+    <section className="card active-work-card">
       <div className="section-heading">
         <div>
           <p className="eyebrow">On the desk</p>

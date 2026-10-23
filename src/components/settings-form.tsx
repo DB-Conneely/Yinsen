@@ -17,6 +17,7 @@ export function SettingsForm({
   children,
   success = "Saved. Changes apply on the next page load.",
   signOut = false,
+  dirty,
 }: {
   title: string;
   path?: string;
@@ -25,6 +26,7 @@ export function SettingsForm({
   children?: ReactNode;
   success?: string;
   signOut?: boolean;
+  dirty?: boolean;
 }): ReactElement {
   const router = useRouter();
   const [state, setState] = useState<{
@@ -80,7 +82,9 @@ export function SettingsForm({
                 : `Save ${title.toLowerCase()}`}
           </button>
           <p role={state.status === "error" ? "alert" : "status"}>
-            {state.message}
+            {state.status === "idle" && dirty === false
+              ? "Matches saved settings."
+              : state.message}
           </p>
         </div>
       </fieldset>

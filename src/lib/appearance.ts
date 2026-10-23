@@ -291,12 +291,12 @@ export function appearanceStyle(
       : variables["--font-body"];
   variables["--shadow"] =
     value.finish === "layered"
-      ? "0 1px 2px #00000008, 0 8px 24px #0000000a"
+      ? "0 1px 2px #00000014, 0 8px 22px #00000012, 0 24px 48px #00000008"
       : "none";
   variables["--surface-inset"] =
     value.finish === "layered"
-      ? "inset 0 1px 0 #ffffff0d"
-      : "inset 0 0 0 transparent";
+      ? "inset 0 1px 0 #ffffff66, inset 0 -1px 0 #0000000a"
+      : "inset 0 1px 0 #ffffff18";
   variables["--radius"] = "0.875rem";
   variables["--radius-small"] = "0.5rem";
   variables["--space-3"] = "1.25rem";

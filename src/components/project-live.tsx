@@ -12,13 +12,13 @@ export function ProjectLive({
   children: ReactNode;
 }): ReactElement {
   const router = useRouter();
-  const [connection, setConnection] = useState("Connecting to live updates…");
+  const [connection, setConnection] = useState("");
   useEffect(() => {
     const source = new EventSource(
       `/api/events${projectId ? `?projectId=${projectId}` : clientId ? `?clientId=${clientId}` : ""}`,
     );
     source.onopen = (): void => {
-      setConnection("Live updates connected");
+      setConnection("");
       router.refresh();
     };
     source.addEventListener("refresh", () => {
@@ -46,9 +46,11 @@ export function ProjectLive({
   const visible = !connection.startsWith("Access changed.");
   return (
     <>
-      <p className="live-status" role="status">
-        {connection}
-      </p>
+      {connection && (
+        <p className="live-status" role="status">
+          {connection}
+        </p>
+      )}
       {visible ? (
         children
       ) : (

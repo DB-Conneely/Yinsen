@@ -162,6 +162,10 @@ export function AppearanceSettings({
   return (
     <SettingsForm
       title="Installation appearance"
+      dirty={
+        JSON.stringify(draft) !==
+        JSON.stringify(appearanceSchema.parse(settings))
+      }
       values={() => ({
         section: "appearance",
         ...draft,

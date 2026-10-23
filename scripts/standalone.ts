@@ -8,6 +8,11 @@ for (const name of [
   "SourceSerif4-LICENSE.txt",
 ])
   cpSync(`src/app/fonts/${name}`, `.next/static/font-licenses/${name}`);
+mkdirSync(".next/static/textures", { recursive: true });
+cpSync(
+  "public/textures/paper-grain.svg",
+  ".next/static/textures/paper-grain.svg",
+);
 cpSync(".next/static", ".next/standalone/.next/static", { recursive: true });
 cpSync("release.json", ".next/standalone/release.json");
 // Next traces build-time dotenv files; runtime must use the current environment.

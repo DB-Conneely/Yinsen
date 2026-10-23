@@ -96,7 +96,7 @@ else if (args.at(-1) === "/app/LICENSE") {
   );
 });
 
-function copyFontLicenses(root: string): void {
+function copyShippedAssets(root: string): void {
   mkdirSync(join(root, "src/app/fonts"), { recursive: true });
   for (const name of [
     "Inter-LICENSE.txt",
@@ -107,6 +107,11 @@ function copyFontLicenses(root: string): void {
       resolve("src/app/fonts", name),
       join(root, "src/app/fonts", name),
     );
+  mkdirSync(join(root, "public/textures"), { recursive: true });
+  copyFileSync(
+    resolve("public/textures/paper-grain.svg"),
+    join(root, "public/textures/paper-grain.svg"),
+  );
 }
 
 describe("installed standalone commands", () => {
@@ -114,7 +119,7 @@ describe("installed standalone commands", () => {
     const root = mkdtempSync(join(tmpdir(), "yinsen-packaging-"));
     mkdirSync(join(root, ".next/static"), { recursive: true });
     mkdirSync(join(root, ".next/standalone"), { recursive: true });
-    copyFontLicenses(root);
+    copyShippedAssets(root);
     writeFileSync(join(root, ".next/static/asset.css"), "body{color:black}");
     writeFileSync(join(root, ".env"), "APP_ORIGIN=http://localhost:3000");
     writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
@@ -151,6 +156,11 @@ describe("installed standalone commands", () => {
         "utf8",
       ),
     ).toBe("body{color:black}");
+    expect(
+      readFileSync(
+        join(root, ".next/standalone/.next/static/textures/paper-grain.svg"),
+      ),
+    ).toEqual(readFileSync(resolve("public/textures/paper-grain.svg")));
     expect(readFileSync(join(root, ".env"), "utf8")).toContain("APP_ORIGIN=");
     expect(
       readFileSync(join(root, ".next/standalone/release.json"), "utf8"),
@@ -199,7 +209,7 @@ describe("installed standalone commands", () => {
     const root = mkdtempSync(join(tmpdir(), "yinsen-private-trace-"));
     mkdirSync(join(root, ".next/static"), { recursive: true });
     mkdirSync(join(root, ".next/standalone/data/uploads"), { recursive: true });
-    copyFontLicenses(root);
+    copyShippedAssets(root);
     mkdirSync(join(root, ".next/standalone/docs"), { recursive: true });
     writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
     writeFileSync(
