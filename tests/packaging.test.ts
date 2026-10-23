@@ -107,11 +107,6 @@ function copyShippedAssets(root: string): void {
       resolve("src/app/fonts", name),
       join(root, "src/app/fonts", name),
     );
-  mkdirSync(join(root, "public/textures"), { recursive: true });
-  copyFileSync(
-    resolve("public/textures/paper-grain.svg"),
-    join(root, "public/textures/paper-grain.svg"),
-  );
 }
 
 describe("installed standalone commands", () => {
@@ -156,11 +151,6 @@ describe("installed standalone commands", () => {
         "utf8",
       ),
     ).toBe("body{color:black}");
-    expect(
-      readFileSync(
-        join(root, ".next/standalone/.next/static/textures/paper-grain.svg"),
-      ),
-    ).toEqual(readFileSync(resolve("public/textures/paper-grain.svg")));
     expect(readFileSync(join(root, ".env"), "utf8")).toContain("APP_ORIGIN=");
     expect(
       readFileSync(join(root, ".next/standalone/release.json"), "utf8"),

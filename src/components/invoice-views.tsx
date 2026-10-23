@@ -89,7 +89,9 @@ export async function InvoiceList({
               ))}
           </select>
         </label>
-        <button type="submit">Filter invoices</button>
+        <button type="submit" className="secondary">
+          Filter invoices
+        </button>
       </form>
       {invoices.length ? (
         <div className="invoice-list">

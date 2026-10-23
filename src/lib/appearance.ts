@@ -42,15 +42,18 @@ export const defaultAppearance: Appearance = {
   corners: "soft",
   finish: "layered",
   lightPalette: "warm",
-  darkPalette: "slate",
+  darkPalette: "charcoal",
   lightBackground: "#f4f4f0",
   lightSurface: "#fffefa",
-  darkBackground: "#151a20",
-  darkSurface: "#1d242c",
+  darkBackground: "#0a0a0b",
+  darkSurface: "#151516",
 };
 export const legacyAppearance: Appearance = {
   ...defaultAppearance,
   finish: "clean",
+  darkPalette: "slate",
+  darkBackground: "#151a20",
+  darkSurface: "#1d242c",
 };
 export const palettes = {
   warm: {
@@ -94,9 +97,9 @@ export const palettes = {
     border: "#d5d5d5",
   },
   charcoal: {
-    canvas: "#181818",
-    surface: "#242424",
-    surfaceMuted: "#303030",
+    canvas: "#0a0a0b",
+    surface: "#151516",
+    surfaceMuted: "#202022",
     text: "#f2f2f2",
     muted: "#b6b6b6",
     border: "#484848",
@@ -245,9 +248,12 @@ export function themePalette(
 ): ThemePalette {
   const preset =
     palettes[mode === "light" ? value.lightPalette : value.darkPalette];
-  // Old issued snapshots predate custom surfaces and retain their saved preset.
-  const canvas = value[`${mode}Background`] ?? preset.canvas,
-    surface = value[`${mode}Surface`] ?? preset.surface;
+  // Preset-only issued snapshots retain the earlier Charcoal bases as well.
+  const oldCharcoal = mode === "dark" && value.darkPalette === "charcoal";
+  const canvas =
+      value[`${mode}Background`] ?? (oldCharcoal ? "#181818" : preset.canvas),
+    surface =
+      value[`${mode}Surface`] ?? (oldCharcoal ? "#242424" : preset.surface);
   const shared = readableForeground(canvas, surface);
   const ink = shared ?? onColour(canvas),
     surfaces = shared ? backgrounds(canvas, surface, ink) : [canvas];
@@ -290,27 +296,32 @@ export function appearanceStyle(
       ? 'var(--font-source-serif, "Source Serif 4"), Georgia, serif'
       : variables["--font-body"];
   variables["--shadow"] =
-    value.finish === "layered"
-      ? "0 1px 2px #00000014, 0 8px 22px #00000012, 0 24px 48px #00000008"
-      : "none";
-  variables["--surface-inset"] =
-    value.finish === "layered"
-      ? "inset 0 1px 0 #ffffff66, inset 0 -1px 0 #0000000a"
-      : "inset 0 1px 0 #ffffff18";
+    "0 2px 0 var(--material-under), 0 4px 6px -3px var(--material-contact)" +
+    (value.finish === "layered"
+      ? ", 0 14px 24px -13px var(--material-ambient)"
+      : "");
+  variables["--surface-inset"] = "inset 0 1px 0 var(--material-top)";
   variables["--radius"] = "0.875rem";
   variables["--radius-small"] = "0.5rem";
   variables["--space-3"] = "1.25rem";
   variables["--space-4"] = "2rem";
   variables["--space-5"] = "2.75rem";
-  variables["--control-height"] = "2.625rem";
+  variables["--control-height"] = "2.75rem";
   for (const [name, palette] of [
     ["light", light],
     ["dark", dark],
-  ] as const)
+  ] as const) {
     for (const [key, colour] of Object.entries(palette))
       variables[
         `--${name}-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`
       ] = colour;
+    for (const [role, colour] of [
+      ["material", palette.surface],
+      ["canvas-material", palette.canvas],
+    ] as const)
+      for (const [key, token] of Object.entries(materialRoles(colour)))
+        variables[`--${name}-${role}-${key}`] = token;
+  }
   if (value.corners === "square") {
     variables["--radius"] = "0.25rem";
     variables["--radius-small"] = "0.2rem";
@@ -322,4 +333,17 @@ export function appearanceStyle(
     variables["--control-height"] = "2.5rem";
   }
   return variables;
+}
+
+// Material follows the actual saved surface, including opposite-brightness palettes.
+function materialRoles(colour: string): Record<string, string> {
+  const dark = onColour(colour) === "#ffffff";
+  return {
+    edge: dark ? "#ffffff24" : "#141b242e",
+    top: dark ? "#ffffff1f" : "#ffffffe6",
+    under: dark ? "#0000008c" : "#141b2429",
+    contact: dark ? "#00000073" : "#141b241f",
+    ambient: dark ? "#00000080" : "#141b2429",
+    inset: dark ? "#0000005c" : "#141b2421",
+  };
 }

@@ -75,11 +75,16 @@ export function SettingsForm({
         {children}
         <div className="settings-save">
           <button type="submit">
-            {state.status === "pending"
-              ? "Saving…"
-              : state.status === "error"
-                ? `Retry ${title.toLowerCase()}`
-                : `Save ${title.toLowerCase()}`}
+            <span className="button-label-reserve" aria-hidden="true">
+              Save {title.toLowerCase()}
+            </span>
+            <span className="button-label-current">
+              {state.status === "pending"
+                ? "Saving…"
+                : state.status === "error"
+                  ? `Retry ${title.toLowerCase()}`
+                  : `Save ${title.toLowerCase()}`}
+            </span>
           </button>
           <p role={state.status === "error" ? "alert" : "status"}>
             {state.status === "idle" && dirty === false

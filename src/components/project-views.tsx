@@ -78,7 +78,9 @@ export async function ProjectList({
             ))}
           </select>
         </label>
-        <button type="submit">Filter projects</button>
+        <button type="submit" className="secondary">
+          Filter projects
+        </button>
       </form>
       {projects.length ? (
         <div className="project-grid">

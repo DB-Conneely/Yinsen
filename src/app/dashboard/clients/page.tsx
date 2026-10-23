@@ -63,7 +63,9 @@ export default async function ClientsPage({
           />
           Include archived clients
         </label>
-        <button type="submit">Search</button>
+        <button type="submit" className="secondary">
+          Search
+        </button>
       </form>
       <p role="status" className="list-meta">
         {result.total} clients · Page {result.page} of {result.pages}

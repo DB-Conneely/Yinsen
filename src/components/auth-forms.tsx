@@ -106,6 +106,7 @@ export function LogoutButton({
     <div>
       <button
         type="button"
+        className="secondary"
         onClick={() => {
           void logout();
         }}

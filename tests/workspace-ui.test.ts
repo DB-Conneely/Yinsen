@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DashboardNavigation } from "../src/components/dashboard-nav";
 import { ProjectLive } from "../src/components/project-live";
 import { SettingsForm } from "../src/components/settings-form";
+import NotFound from "../src/app/not-found";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard/invoices/new",
@@ -11,6 +12,15 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("workspace composition", () => {
+  it("gives unavailable and denied pages one generic themed recovery path", () => {
+    const html = renderToStaticMarkup(createElement(NotFound));
+    expect(html).toContain("Page not found");
+    expect(html).toContain(
+      "This page is unavailable or you do not have access.",
+    );
+    expect(html).toContain('href="/"');
+    expect(html).toContain('aria-label="Appearance"');
+  });
   it("labels the compact disclosure with the current destination and retains every destination", () => {
     const html = renderToStaticMarkup(createElement(DashboardNavigation));
     expect(html).toContain('aria-expanded="false"');

@@ -129,6 +129,11 @@ describe("consumed installation settings", () => {
   it("defaults consent off, persists only protected sections, excludes operational facts publicly", async () => {
     expect(original.allowAutomaticUpdates).toBe(false);
     expect(original.finish).toBe("layered");
+    expect(original).toMatchObject({
+      darkPalette: "charcoal",
+      darkBackground: "#0a0a0b",
+      darkSurface: "#151516",
+    });
     expect((await readSettings(request({}, "", "GET"))).status).toBe(401);
     expect(
       (

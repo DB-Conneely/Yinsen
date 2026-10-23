@@ -312,6 +312,7 @@ export function ClientActions({
           </label>
           <input id="login-link" readOnly value={url} />
           <button
+            className="secondary"
             onClick={() => {
               void navigator.clipboard
                 .writeText(url)
@@ -375,6 +376,7 @@ export function RevokeSession({
   return (
     <>
       <button
+        className="secondary"
         disabled={pending}
         onClick={() => {
           void revoke();

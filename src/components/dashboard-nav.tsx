@@ -1,5 +1,11 @@
 "use client";
-import { useRef, useState, type ReactElement, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageNotifications } from "./message-notifications";
@@ -17,6 +23,16 @@ const clientPages = [
   ["Projects", "/portal/projects"],
   ["Invoices", "/portal/invoices"],
 ] as const;
+
+function ordinaryActivation(event: MouseEvent<HTMLElement>): boolean {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
 
 function WorkspaceMenu({
   current,
@@ -56,8 +72,14 @@ function WorkspaceMenu({
         aria-label="Workspace"
         data-open={open}
         onClick={(event) => {
-          if (event.target instanceof Element && event.target.closest("a"))
+          if (
+            ordinaryActivation(event) &&
+            event.target instanceof Element &&
+            event.target.closest("a")
+          ) {
             setOpen(false);
+            if (toggle.current?.getClientRects().length) toggle.current.focus();
+          }
         }}
       >
         {children}
@@ -85,6 +107,10 @@ export function DashboardNavigation({
           key={href}
           href={href}
           aria-current={active?.[1] === href ? "page" : undefined}
+          onClick={(event) => {
+            if (pathname === href && ordinaryActivation(event))
+              event.preventDefault();
+          }}
         >
           {label}
         </Link>

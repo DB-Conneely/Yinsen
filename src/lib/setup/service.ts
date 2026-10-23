@@ -7,6 +7,7 @@ import {
 } from "../auth/session";
 import { getSql } from "../db/client";
 import { AppError } from "../errors";
+import { defaultAppearance } from "../appearance";
 
 export async function isSetupComplete(): Promise<boolean> {
   const rows = await getSql()`select singleton from operator`;
@@ -29,7 +30,7 @@ export async function completeSetup(
     const user = rows[0];
     if (!user)
       throw new AppError(500, "SETUP_FAILED", "Setup could not be completed.");
-    await sql`insert into settings (brand_name, brand_colour, default_currency, welcome_text) values (${data.brandName}, ${data.brandColour}, ${data.defaultCurrency}, ${data.welcomeText})`;
+    await sql`insert into settings (brand_name, brand_colour, default_currency, welcome_text, dark_palette, dark_background, dark_surface) values (${data.brandName}, ${data.brandColour}, ${data.defaultCurrency}, ${data.welcomeText}, ${defaultAppearance.darkPalette}, ${defaultAppearance.darkBackground}, ${defaultAppearance.darkSurface})`;
     const session = await createOperatorSession(user.id, sql);
     return { user: { ...user, role: "operator" as const }, session };
   });

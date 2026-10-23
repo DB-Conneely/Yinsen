@@ -319,6 +319,7 @@ export function ProjectForm({
           </ul>
           <button
             type="button"
+            className="secondary"
             disabled={pending}
             onClick={() => {
               setExpectedRevision(review.editRevision);

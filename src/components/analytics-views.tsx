@@ -235,8 +235,8 @@ export function DashboardView({
       </div>
       <DashboardStats snapshot={snapshot} />
       <div className="overview-columns">
-        <NeedsAttention snapshot={snapshot} />
         <ActiveProjects snapshot={snapshot} />
+        <NeedsAttention snapshot={snapshot} />
       </div>
       <MonthlyRevenue revenue={snapshot.revenue} lastSix />
       <RecentActivity snapshot={snapshot} />
