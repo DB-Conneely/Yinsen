@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { assertIsolatedTestEnvironment } from "./fixture";
 import { z } from "zod";
+import { defaultAppearance } from "../src/lib/appearance";
 
 assertIsolatedTestEnvironment(process.env);
 const origin = process.env.TEST_ORIGIN ?? "http://localhost:3093";
@@ -60,7 +61,16 @@ async function call(
     redirect: "manual",
   });
   assert.equal(response.status, expected, path);
-  return envelope.parse(await response.json()).data;
+  const result = envelope.parse(await response.json());
+  if (path === "/api/account/password" && response.ok) {
+    const rotated = response.headers.get("set-cookie") ?? "";
+    assert.match(rotated, /^pylon_session=[a-f0-9]{64};/);
+    assert.ok(rotated.includes("HttpOnly; SameSite=Lax"));
+    assert.ok(!rotated.includes("Domain="));
+    assert.deepEqual(result.data, { saved: true });
+    cookie = rotated.split(";")[0] ?? "";
+  }
+  return result.data;
 }
 const initial = z
   .object({
@@ -133,6 +143,50 @@ const sessions = z
   .array(z.object({ id: z.uuid(), current: z.boolean() }))
   .parse(await call("/api/account/sessions"));
 assert.ok(sessions.some((session) => session.current));
+const mixed = {
+  ...defaultAppearance,
+  typography: "humanist",
+  finish: "layered",
+  lightBackground: "#000000",
+  lightSurface: "#ffffff",
+  darkBackground: "#ffffff",
+  darkSurface: "#000000",
+};
+await call("/api/settings", "PATCH", { section: "appearance", ...mixed });
+assert.deepEqual(
+  z
+    .object({
+      typography: z.literal("humanist"),
+      finish: z.literal("layered"),
+      lightBackground: z.literal("#000000"),
+      lightSurface: z.literal("#ffffff"),
+      darkBackground: z.literal("#ffffff"),
+      darkSurface: z.literal("#000000"),
+    })
+    .parse(await call("/api/settings")),
+  {
+    typography: "humanist",
+    finish: "layered",
+    lightBackground: "#000000",
+    lightSurface: "#ffffff",
+    darkBackground: "#ffffff",
+    darkSurface: "#000000",
+  },
+);
+await call(
+  "/api/settings",
+  "PATCH",
+  { section: "appearance", ...mixed, lightSurface: "#invalid" },
+  400,
+);
+const oldCookie = cookie;
+const otherLogin = await fetch(origin + "/api/auth/login", {
+  method: "POST",
+  headers: { origin, "content-type": "application/json" },
+  body: JSON.stringify(credentials),
+});
+assert.equal(otherLogin.status, 200);
+const otherCookie = otherLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
 await call(
   "/api/account/password",
   "POST",
@@ -149,7 +203,11 @@ await call("/api/account/password", "POST", {
   newPassword,
   confirmPassword: newPassword,
 });
-await call("/api/settings", "GET", undefined, 401);
+assert.notEqual(cookie, oldCookie);
+await call("/api/settings");
+await call("/api/settings", "GET", undefined, 401, oldCookie);
+await call("/api/settings", "GET", undefined, 401, otherCookie);
+await call("/api/auth/me", "GET", undefined, 200, clientCookie);
 await call("/api/auth/login", "POST", credentials, 401);
 const relogin = await fetch(origin + "/api/auth/login", {
   method: "POST",
@@ -163,6 +221,13 @@ await call("/api/account/password", "POST", {
   newPassword: credentials.password,
   confirmPassword: credentials.password,
 });
+await call("/api/settings");
+await call("/api/account/sessions", "POST", {
+  scope: "all",
+  currentPassword: credentials.password,
+});
+await call("/api/settings", "GET", undefined, 401);
+await call("/api/auth/me", "GET", undefined, 200, clientCookie);
 process.stdout.write(
-  "Installed settings HTTP: protected preference persistence/isolation, public exclusion, real client denial and password/session revocation passed.\n",
+  "Installed settings HTTP: custom appearance persistence/isolation, invalid syntax denial, password cookie rotation/continuity, other-session revocation and explicit sign-out-all passed.\n",
 );

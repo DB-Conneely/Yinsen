@@ -20,6 +20,7 @@ const publicFields = {
   typography: settings.typography,
   density: settings.density,
   corners: settings.corners,
+  finish: settings.finish,
   lightPalette: settings.lightPalette,
   darkPalette: settings.darkPalette,
   lightBackground: settings.lightBackground,

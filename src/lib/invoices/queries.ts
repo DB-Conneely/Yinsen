@@ -6,7 +6,7 @@ import { AppError } from "../errors";
 import { operatorOnly, type ProjectActor } from "../projects/access";
 import { resourceId } from "../projects/validation";
 import { invoiceStatus } from "./validation";
-import type { Appearance } from "../appearance";
+import type { AppearanceSnapshot } from "../appearance";
 
 export type Invoice = {
   id: string;
@@ -24,7 +24,7 @@ export type Invoice = {
   issuerName: string;
   issuerEmail: string;
   issuerDetails?:
-    | (Appearance & {
+    | (AppearanceSnapshot & {
         contactPhone: string;
         businessAddress: string;
         website: string;

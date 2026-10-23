@@ -1,5 +1,5 @@
 import type { Invoice } from "../invoices/queries";
-import { defaultAppearance, themePalette } from "../appearance";
+import { legacyAppearance, themePalette } from "../appearance";
 import { readConfiguration } from "../config";
 
 export function escapeHtml(value: string): string {
@@ -18,13 +18,20 @@ export function brandedEmail(
   details: Invoice["issuerDetails"],
   contactEmail = "",
 ): string {
-  const appearance = details ?? defaultAppearance;
+  const appearance = details ?? legacyAppearance;
   const light = themePalette(appearance, "light"),
     dark = themePalette(appearance, "dark");
+  // Email clients can replace fonts/colours; no remote font fetch is required.
+  const bodyFont =
+    appearance.typography === "humanist"
+      ? "'Source Sans 3','Segoe UI',Arial,sans-serif"
+      : "Inter,Arial,sans-serif";
   const font =
-    appearance.typography === "modern"
-      ? "system-ui,sans-serif"
-      : "Georgia,serif";
+    appearance.typography === "editorial"
+      ? "'Source Serif 4',Georgia,serif"
+      : bodyFont;
+  const shadow =
+    appearance.finish === "layered" ? "0 2px 12px #00000012" : "none";
   const spacing = appearance.density === "compact" ? 20 : 32;
   const radius = appearance.corners === "soft" ? 14 : 4;
   const logo = details?.logoId
@@ -39,5 +46,5 @@ export function brandedEmail(
     .filter(Boolean)
     .map((line) => escapeHtml(line ?? ""))
     .join("<br>");
-  return `<html><head><meta name="color-scheme" content="light dark"><style>@media(prefers-color-scheme:dark){.email-body{background:${dark.canvas}!important;color:${dark.text}!important}.email-card{background:${dark.surface}!important}}</style></head><body class="email-body" style="background:${light.canvas};color:${light.text};font-family:system-ui,sans-serif;padding:16px"><div class="email-card" style="max-width:600px;margin:auto;padding:${spacing}px;background:${light.surface};border-radius:${radius}px">${logo}<h1 style="font-family:${font}">${escapeHtml(name)}</h1>${content}<p style="white-space:pre-line">${contact}</p></div></body></html>`;
+  return `<html><head><meta name="color-scheme" content="light dark"><style>@media(prefers-color-scheme:dark){.email-body{background:${dark.canvas}!important;color:${dark.text}!important}.email-card{background:${dark.surface}!important;color:${dark.surfaceText}!important}}</style></head><body class="email-body" style="background:${light.canvas};color:${light.text};font-family:${bodyFont};padding:16px"><div class="email-card" style="max-width:600px;margin:auto;padding:${spacing}px;background:${light.surface};color:${light.surfaceText};border-radius:${radius}px;box-shadow:${shadow}">${logo}<h1 style="font-family:${font}">${escapeHtml(name)}</h1>${content}<p style="white-space:pre-line">${contact}</p></div></body></html>`;
 }

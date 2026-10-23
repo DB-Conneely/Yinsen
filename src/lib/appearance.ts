@@ -4,42 +4,53 @@ import type { CSSProperties } from "react";
 export const hexColour = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, "Choose a six-digit hex colour.");
-export const appearanceSchema = z
-  .object({
-    typography: z.enum(["editorial", "modern"]),
-    density: z.enum(["comfortable", "compact"]),
-    corners: z.enum(["soft", "square"]),
-    lightPalette: z.enum(["warm", "cool"]),
-    darkPalette: z.enum(["slate", "midnight"]),
-    lightBackground: hexColour,
-    lightSurface: hexColour,
-    darkBackground: hexColour,
-    darkSurface: hexColour,
-  })
-  .superRefine((value, context) => {
-    for (const mode of ["light", "dark"] as const) {
-      if (
-        !readableForeground(value[`${mode}Background`], value[`${mode}Surface`])
-      )
-        context.addIssue({
-          code: "custom",
-          path: [`${mode}Surface`],
-          message:
-            "This shared palette cannot keep all text and controls readable with that background/surface pair. Try colours with more similar brightness, or start from a preset.",
-        });
-    }
-  });
+export const appearanceSchema = z.object({
+  typography: z.enum(["editorial", "modern", "humanist"]),
+  density: z.enum(["comfortable", "compact"]),
+  corners: z.enum(["soft", "square"]),
+  finish: z.enum(["clean", "layered"]),
+  lightPalette: z.enum(["warm", "cool", "chalk"]),
+  darkPalette: z.enum(["slate", "midnight", "charcoal"]),
+  lightBackground: hexColour,
+  lightSurface: hexColour,
+  darkBackground: hexColour,
+  darkSurface: hexColour,
+});
 export type Appearance = z.infer<typeof appearanceSchema>;
+// Issued snapshots may predate custom surfaces and finish. Never rewrite their stored facts.
+export type AppearanceSnapshot = Omit<
+  Appearance,
+  | "finish"
+  | "lightBackground"
+  | "lightSurface"
+  | "darkBackground"
+  | "darkSurface"
+> &
+  Partial<
+    Pick<
+      Appearance,
+      | "finish"
+      | "lightBackground"
+      | "lightSurface"
+      | "darkBackground"
+      | "darkSurface"
+    >
+  >;
 export const defaultAppearance: Appearance = {
   typography: "editorial",
   density: "comfortable",
   corners: "soft",
+  finish: "layered",
   lightPalette: "warm",
   darkPalette: "slate",
   lightBackground: "#f4f4f0",
   lightSurface: "#fffefa",
   darkBackground: "#151a20",
   darkSurface: "#1d242c",
+};
+export const legacyAppearance: Appearance = {
+  ...defaultAppearance,
+  finish: "clean",
 };
 export const palettes = {
   warm: {
@@ -73,6 +84,22 @@ export const palettes = {
     text: "#f1f4fd",
     muted: "#b1bfd9",
     border: "#3c4963",
+  },
+  chalk: {
+    canvas: "#f3f3f3",
+    surface: "#ffffff",
+    surfaceMuted: "#eaeaea",
+    text: "#262626",
+    muted: "#626262",
+    border: "#d5d5d5",
+  },
+  charcoal: {
+    canvas: "#181818",
+    surface: "#242424",
+    surfaceMuted: "#303030",
+    text: "#f2f2f2",
+    muted: "#b6b6b6",
+    border: "#484848",
   },
 };
 
@@ -127,6 +154,21 @@ function readableForeground(
     ),
   );
 }
+function onColour(colour: string): string {
+  return contrastRatio(colour, "#000000") > contrastRatio(colour, "#ffffff")
+    ? "#000000"
+    : "#ffffff";
+}
+
+export function appearanceGuidance(value: Appearance): string[] {
+  return (["light", "dark"] as const).flatMap((mode) =>
+    readableForeground(value[`${mode}Background`], value[`${mode}Surface`])
+      ? []
+      : [
+          `${mode === "light" ? "Light" : "Dark"} background and ${mode} surface differ strongly in brightness. Text adapts to each base, but mixed panels or borders may have low contrast. You can save these colours, or start from a preset.`,
+        ],
+  );
+}
 function tone(
   base: string,
   ink: string,
@@ -141,12 +183,15 @@ function tone(
   return ink;
 }
 
-export function themePalette(
-  value: Appearance,
-  mode: "light" | "dark",
-  brandColour = "#2457a7",
-): typeof palettes.warm & {
+type ThemePalette = typeof palettes.warm & {
   accentInk: string;
+  brandFill: string;
+  focus: string;
+  surfaceText: string;
+  surfaceMutedText: string;
+  surfaceAccentInk: string;
+  surfaceBorder: string;
+  surfaceFocus: string;
   accentSoft: string;
   actionInk: string;
   danger: string;
@@ -154,46 +199,104 @@ export function themePalette(
   positive: string;
   positiveSurface: string;
   colorScheme: "light" | "dark";
-} {
+};
+type SurfaceRoles = Omit<
+  ThemePalette,
+  | "canvas"
+  | "surface"
+  | "text"
+  | "muted"
+  | "border"
+  | "accentInk"
+  | "brandFill"
+  | "focus"
+  | "actionInk"
+  | "colorScheme"
+>;
+
+function surfaceRoles(
+  preset: typeof palettes.warm,
+  surface: string,
+  ink: string,
+  brand: string,
+  sharedSurfaces?: string[],
+): SurfaceRoles {
+  const surfaceMuted = mix(surface, ink, 0.04);
+  const targets = sharedSurfaces ?? [surface, surfaceMuted];
+  return {
+    surfaceMuted,
+    surfaceText: tone(preset.text, ink, targets),
+    surfaceMutedText: tone(preset.muted, ink, targets),
+    surfaceAccentInk: tone(brand, ink, targets, 5.2),
+    surfaceBorder: tone(preset.border, ink, targets, 3),
+    surfaceFocus: tone(brand, ink, targets, 3),
+    accentSoft: surfaceMuted,
+    danger: tone("#a62c3b", ink, targets),
+    dangerSurface: surfaceMuted,
+    positive: tone("#236349", ink, targets),
+    positiveSurface: surfaceMuted,
+  };
+}
+
+export function themePalette(
+  value: AppearanceSnapshot,
+  mode: "light" | "dark",
+  brandColour = "#2457a7",
+): ThemePalette {
   const preset =
     palettes[mode === "light" ? value.lightPalette : value.darkPalette];
   // Old issued snapshots predate custom surfaces and retain their saved preset.
   const canvas = value[`${mode}Background`] ?? preset.canvas,
     surface = value[`${mode}Surface`] ?? preset.surface;
-  const ink = readableForeground(canvas, surface) ?? "#000000",
-    surfaces = backgrounds(canvas, surface, ink);
-  const surfaceMuted = surfaces[2] ?? surface;
+  const shared = readableForeground(canvas, surface);
+  const ink = shared ?? onColour(canvas),
+    surfaces = shared ? backgrounds(canvas, surface, ink) : [canvas];
+  const surfaceInk = shared ?? onColour(surface);
   const accentInk = tone(brandColour, ink, surfaces, 5.2);
   return {
     canvas,
     surface,
-    surfaceMuted,
     text: tone(preset.text, ink, surfaces),
     muted: tone(preset.muted, ink, surfaces),
     border: tone(preset.border, ink, surfaces, 3),
     accentInk,
-    accentSoft: surfaceMuted,
-    actionInk:
-      contrastRatio(accentInk, "#000000") > contrastRatio(accentInk, "#ffffff")
-        ? "#000000"
-        : "#ffffff",
-    danger: tone(mode === "light" ? "#a62c3b" : "#ff9ba7", ink, surfaces),
-    dangerSurface: surfaceMuted,
-    positive: tone(mode === "light" ? "#236349" : "#9bd4b6", ink, surfaces),
-    positiveSurface: surfaceMuted,
+    brandFill: brandColour,
+    focus: tone(brandColour, ink, surfaces, 3),
+    actionInk: onColour(brandColour),
+    ...surfaceRoles(
+      preset,
+      surface,
+      surfaceInk,
+      brandColour,
+      shared ? surfaces : undefined,
+    ),
     colorScheme: ink === "#ffffff" ? "dark" : "light",
   };
 }
 
 export function appearanceStyle(
-  value: Appearance,
+  value: AppearanceSnapshot,
   brandColour = "#2457a7",
-): CSSProperties {
+): CSSProperties & Record<`--${string}`, string> {
   const light = themePalette(value, "light", brandColour),
     dark = themePalette(value, "dark", brandColour);
   const variables: Record<string, string> = {};
+  variables["--font-body"] =
+    value.typography === "humanist"
+      ? 'var(--font-source-sans, "Source Sans 3"), sans-serif'
+      : 'var(--font-inter, "Inter"), sans-serif';
   variables["--font-display"] =
-    '"Iowan Old Style", Baskerville, "Palatino Linotype", Georgia, "Liberation Serif", serif';
+    value.typography === "editorial"
+      ? 'var(--font-source-serif, "Source Serif 4"), Georgia, serif'
+      : variables["--font-body"];
+  variables["--shadow"] =
+    value.finish === "layered"
+      ? "0 1px 2px #00000008, 0 8px 24px #0000000a"
+      : "none";
+  variables["--surface-inset"] =
+    value.finish === "layered"
+      ? "inset 0 1px 0 #ffffff0d"
+      : "inset 0 0 0 transparent";
   variables["--radius"] = "0.875rem";
   variables["--radius-small"] = "0.5rem";
   variables["--space-3"] = "1.25rem";
@@ -208,8 +311,6 @@ export function appearanceStyle(
       variables[
         `--${name}-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`
       ] = colour;
-  if (value.typography === "modern")
-    variables["--font-display"] = "ui-sans-serif, system-ui, sans-serif";
   if (value.corners === "square") {
     variables["--radius"] = "0.25rem";
     variables["--radius-small"] = "0.2rem";

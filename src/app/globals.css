@@ -14,12 +14,17 @@
   --accent-ink: color-mix(in srgb, var(--brand-colour) 32%, #29271e);
   --accent-soft: color-mix(in srgb, var(--brand-colour) 8%, var(--surface));
   --action-ink: #fff;
+  --brand-fill: var(--brand-colour);
+  --focus: var(--accent-ink);
+  --surface-text: #242c30;
+  --surface-muted-text: #636e73;
+  --surface-accent-ink: #2457a7;
+  --surface-border: #dcdfd8;
+  --surface-focus: #2457a7;
   --font-body:
-    "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  --font-display:
-    "Iowan Old Style", Baskerville, "Palatino Linotype", Georgia,
-    "Liberation Serif", serif;
+    var(--font-inter, "Inter"), ui-sans-serif, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-source-serif, "Source Serif 4"), Georgia, serif;
   --text-small: 0.8125rem;
   --text-body: 0.9375rem;
   --text-title: 2.35rem;
@@ -164,10 +169,40 @@
   background: var(--surface-muted);
 }
 .settings-preview {
-  padding: var(--space-4);
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  margin: 0;
+}
+.settings-preview-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+.settings-preview-work.card {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+}
+.settings-preview-work h2 {
+  margin: var(--space-3) 0 var(--space-2);
+}
+.settings-preview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-top: var(--space-3);
+}
+.appearance-advisory {
+  padding: var(--space-2);
+  border-inline-start: 3px solid var(--border);
+  font-size: var(--text-small);
+}
+@media (max-width: 700px) {
+  .settings-preview-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .settings-preview h2 {
   font-family: var(--font-display);
@@ -684,7 +719,12 @@
   --positive-surface: #243b33;
   --accent-ink: color-mix(in srgb, var(--brand-colour) 26%, #efeddf);
   --accent-soft: color-mix(in srgb, var(--brand-colour) 13%, var(--surface));
-  --action-ink: #111821;
+  --action-ink: #ffffff;
+  --surface-text: #eff3f6;
+  --surface-muted-text: #aebbc5;
+  --surface-accent-ink: #aebbc5;
+  --surface-border: #36434e;
+  --surface-focus: #aebbc5;
   --shadow: 0 2px 5px #00000014, 0 10px 26px #00000014;
 }
 * {
@@ -694,6 +734,7 @@ body {
   margin: 0;
   font-size: var(--text-body);
   line-height: 1.55;
+  font-optical-sizing: auto;
 }
 html {
   scroll-padding-top: calc(var(--header-height) + 1rem);
@@ -725,6 +766,7 @@ h3 {
   letter-spacing: -0.015em;
 }
 h2 {
+  font-family: var(--font-display);
   font-size: 1rem;
   line-height: 1.4;
   letter-spacing: -0.015em;
@@ -757,7 +799,7 @@ button,
   padding: 0.55rem 1rem;
   border: 1px solid transparent;
   border-radius: var(--radius-small);
-  background: var(--accent-ink);
+  background: var(--brand-fill);
   color: var(--action-ink);
   font-size: 0.875rem;
   font-weight: 600;
@@ -781,7 +823,7 @@ button:disabled {
   cursor: not-allowed;
 }
 :focus-visible {
-  outline: 3px solid var(--accent-ink);
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
   scroll-margin-block: 1rem;
 }
@@ -800,7 +842,7 @@ textarea {
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
-  color: var(--text);
+  color: var(--surface-text, var(--text));
   background: var(--surface);
   box-shadow: 0 1px 2px #00000003;
 }
@@ -886,6 +928,13 @@ legend {
   --accent-ink: var(--light-accent-ink, #2457a7);
   --accent-soft: var(--light-accent-soft, #eeefe9);
   --action-ink: var(--light-action-ink, #ffffff);
+  --brand-fill: var(--light-brand-fill, var(--brand-colour));
+  --focus: var(--light-focus, #2457a7);
+  --surface-text: var(--light-surface-text, #242c30);
+  --surface-muted-text: var(--light-surface-muted-text, #636e73);
+  --surface-accent-ink: var(--light-surface-accent-ink, #2457a7);
+  --surface-border: var(--light-surface-border, #dcdfd8);
+  --surface-focus: var(--light-surface-focus, #2457a7);
   --danger: var(--light-danger, #a62c3b);
   --danger-surface: var(--light-danger-surface, #fff0f1);
   --positive: var(--light-positive, #236349);
@@ -898,6 +947,7 @@ legend {
   --border: var(--light-border, #dcdfd8);
   color: var(--text);
   background: var(--canvas);
+  font-family: var(--font-body);
 }
 .brand-frame {
   min-height: 100dvh;
@@ -905,7 +955,8 @@ legend {
   flex-direction: column;
 }
 [data-theme="dark"] .brand-frame,
-[data-theme="dark"] .appearance-surface {
+[data-theme="dark"] .appearance-surface:not([data-preview-theme="light"]),
+.appearance-surface[data-preview-theme="dark"] {
   color-scheme: var(--dark-color-scheme, dark);
   --canvas: var(--dark-canvas, #151a20);
   --surface: var(--dark-surface, #1d242c);
@@ -916,14 +967,36 @@ legend {
   --accent-ink: var(--dark-accent-ink, #aebbc5);
   --accent-soft: var(--dark-accent-soft, #27313a);
   --action-ink: var(--dark-action-ink, #111821);
+  --brand-fill: var(--dark-brand-fill, var(--brand-colour));
+  --focus: var(--dark-focus, #aebbc5);
+  --surface-text: var(--dark-surface-text, #eff3f6);
+  --surface-muted-text: var(--dark-surface-muted-text, #aebbc5);
+  --surface-accent-ink: var(--dark-surface-accent-ink, #aebbc5);
+  --surface-border: var(--dark-surface-border, #36434e);
+  --surface-focus: var(--dark-surface-focus, #aebbc5);
   --danger: var(--dark-danger, #ff9ba7);
   --danger-surface: var(--dark-danger-surface, #351f28);
   --positive: var(--dark-positive, #9bd4b6);
   --positive-surface: var(--dark-positive-surface, #243b33);
 }
+.card,
+.settings-preview-work,
+.brand-header,
+.workspace-sidebar,
+.table-wrap,
+.proposal-dialog,
+.message-bubble,
+.message-composer {
+  --text: var(--surface-text);
+  --muted: var(--surface-muted-text);
+  --accent-ink: var(--surface-accent-ink);
+  --border: var(--surface-border);
+  --focus: var(--surface-focus);
+  color: var(--text);
+}
 .brand-frame input::placeholder,
 .brand-frame textarea::placeholder {
-  color: var(--muted);
+  color: var(--surface-muted-text, var(--muted));
   opacity: 1;
 }
 .brand-header {
@@ -1041,7 +1114,7 @@ legend {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-4);
-  box-shadow: var(--shadow);
+  box-shadow: var(--surface-inset, inset 0 0 0 transparent), var(--shadow);
 }
 summary {
   cursor: pointer;

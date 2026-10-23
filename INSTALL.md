@@ -178,7 +178,7 @@ Changing storage configuration does not migrate retained objects: keep their
 original stores accessible. Logos are public; private files remain authorized.
 
 **Settings** changes brand identity, welcome copy, business details, currency and
-invoicing defaults, colour/typography/density/corners and readable light/dark
+invoicing defaults, colour/typography/density/corners/finish and light/dark
 surfaces. Browser theme preference is separate. Issued invoices retain historical
 identity, appearance and numbering. Automatic-update permission defaults off;
 saving it starts no installation or restart. Follow [OPERATIONS.md](OPERATIONS.md)

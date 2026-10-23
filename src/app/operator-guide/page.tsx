@@ -48,6 +48,15 @@ export default async function OperatorGuide(): Promise<ReactElement> {
         deliverables remain private.
       </p>
       <p>
+        Solid actions keep your exact brand colour in light and dark themes.
+        Custom six-digit hex colours can be saved with advisory contrast
+        guidance. Typography uses bundled fonts; density, corners and
+        Clean/Layered finish are separate choices. Changing your password keeps
+        this browser signed in with a renewed session and signs out other
+        operator sessions. Sign out all operator sessions still includes this
+        browser. Client access is separate.
+      </p>
+      <p>
         Allow automatic updates saves permission only and defaults to off.
         Saving starts no update. A deployment service must be configured
         separately.

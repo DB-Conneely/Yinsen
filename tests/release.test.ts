@@ -31,7 +31,7 @@ function readIdentity(cwd: string): ReturnType<typeof spawnSync> {
 describe("release identity consumed by installed health/tools", () => {
   it("binds the complete ordered migration ledger and exposes honest unbuilt-source identity", () => {
     const migrations = migrationIdentity();
-    expect(migrations.migrations).toHaveLength(12);
+    expect(migrations.migrations).toHaveLength(13);
     expect(migrations.migrationDigest).toBe(
       createHash("sha256")
         .update(JSON.stringify(migrations.migrations))

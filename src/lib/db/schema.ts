@@ -18,7 +18,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { ProposalTerms } from "../messages/proposal-validators";
-import type { Appearance } from "../appearance";
+import type { Appearance, AppearanceSnapshot } from "../appearance";
 
 export const installation = pgTable(
   "installation",
@@ -89,6 +89,7 @@ export const settings = pgTable(
       .notNull()
       .default("comfortable"),
     corners: text().$type<Appearance["corners"]>().notNull().default("soft"),
+    finish: text().$type<Appearance["finish"]>().notNull().default("layered"),
     lightPalette: text("light_palette")
       .$type<Appearance["lightPalette"]>()
       .notNull()
@@ -115,7 +116,7 @@ export const settings = pgTable(
     ),
     check(
       "settings_appearance",
-      sql`${table.typography} in ('editorial','modern') and ${table.density} in ('comfortable','compact') and ${table.corners} in ('soft','square') and ${table.lightPalette} in ('warm','cool') and ${table.darkPalette} in ('slate','midnight')`,
+      sql`${table.typography} in ('editorial','modern','humanist') and ${table.density} in ('comfortable','compact') and ${table.corners} in ('soft','square') and ${table.finish} in ('clean','layered') and ${table.lightPalette} in ('warm','cool','chalk') and ${table.darkPalette} in ('slate','midnight','charcoal')`,
     ),
     check(
       "settings_invoice_prefix",
@@ -507,7 +508,7 @@ export const invoices = pgTable(
     issuerName: text("issuer_name").notNull(),
     issuerEmail: text("issuer_email").notNull(),
     issuerDetails: jsonb("issuer_details").$type<
-      Appearance & {
+      AppearanceSnapshot & {
         contactPhone: string;
         businessAddress: string;
         website: string;

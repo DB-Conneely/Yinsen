@@ -85,6 +85,13 @@
       "when": 1792612346316,
       "tag": "0011_low_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792785513684,
+      "tag": "0012_appearance_choices",
+      "breakpoints": true
     }
   ]
 }

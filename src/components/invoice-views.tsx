@@ -12,7 +12,7 @@ import {
 } from "../lib/invoices/queries";
 import { invoiceStatus } from "../lib/invoices/validation";
 import { getBranding, getOperatorSettings } from "../lib/settings";
-import { appearanceStyle, defaultAppearance } from "../lib/appearance";
+import { appearanceStyle, legacyAppearance } from "../lib/appearance";
 import { readConfiguration } from "../lib/config";
 import { formatBudget } from "../lib/money";
 import { ProjectLive } from "./project-live";
@@ -177,7 +177,7 @@ export function InvoicePreview({
       style={
         {
           ...appearanceStyle(
-            invoice.issuerDetails ?? defaultAppearance,
+            invoice.issuerDetails ?? legacyAppearance,
             invoice.brandColour,
           ),
           "--brand-colour": invoice.brandColour,

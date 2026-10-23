@@ -39,7 +39,7 @@ async function issuerSnapshot(sql: postgres.TransactionSql): Promise<{
       instructions: string;
       details: NonNullable<InvoiceDetail["issuerDetails"]>;
     }[]
-  >`select s.brand_name as name,coalesce(nullif(s.contact_email,''),o.email) as email,s.brand_colour as colour,s.payment_instructions as instructions,jsonb_build_object('contactPhone',s.contact_phone,'businessAddress',s.business_address,'website',s.website,'logoId',s.logo_id,'typography',s.typography,'density',s.density,'corners',s.corners,'lightPalette',s.light_palette,'darkPalette',s.dark_palette,'lightBackground',s.light_background,'lightSurface',s.light_surface,'darkBackground',s.dark_background,'darkSurface',s.dark_surface) as details from settings s join operator o on o.singleton=s.singleton`;
+  >`select s.brand_name as name,coalesce(nullif(s.contact_email,''),o.email) as email,s.brand_colour as colour,s.payment_instructions as instructions,jsonb_build_object('contactPhone',s.contact_phone,'businessAddress',s.business_address,'website',s.website,'logoId',s.logo_id,'typography',s.typography,'density',s.density,'corners',s.corners,'finish',s.finish,'lightPalette',s.light_palette,'darkPalette',s.dark_palette,'lightBackground',s.light_background,'lightSurface',s.light_surface,'darkBackground',s.dark_background,'darkSurface',s.dark_surface) as details from settings s join operator o on o.singleton=s.singleton`;
   if (!rows[0])
     throw new AppError(
       503,

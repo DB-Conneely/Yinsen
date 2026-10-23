@@ -33,6 +33,7 @@ import {
   palettes,
   themePalette,
   contrastRatio,
+  appearanceGuidance,
 } from "../src/lib/appearance";
 import { brandedEmail, escapeHtml } from "../src/lib/email/branding";
 import { saveClient } from "../src/lib/clients/service";
@@ -127,6 +128,7 @@ afterAll(async () => {
 describe("consumed installation settings", () => {
   it("defaults consent off, persists only protected sections, excludes operational facts publicly", async () => {
     expect(original.allowAutomaticUpdates).toBe(false);
+    expect(original.finish).toBe("layered");
     expect((await readSettings(request({}, "", "GET"))).status).toBe(401);
     expect(
       (
@@ -265,6 +267,7 @@ describe("consumed installation settings", () => {
     expect(nextSent.issuerEmail).toBe("hello@example.test");
     expect(nextSent.issuerDetails).toMatchObject({
       businessAddress: "Studio 4\nLondon",
+      finish: original.finish,
     });
     await expect(
       saveInvoiceDefaults(
@@ -318,19 +321,23 @@ describe("consumed installation settings", () => {
   });
 });
 
-async function waitForLock(fragment: string): Promise<void> {
+async function waitForLock(fragment: string, minimum = 1): Promise<void> {
   const deadline = Date.now() + 4000;
   while (Date.now() < deadline) {
     const rows =
       await getSql()`select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and position(${fragment} in query)>0 and pid<>pg_backend_pid()`;
-    if (rows.length) return;
+    if (rows.length >= minimum) return;
   }
   throw new TypeError(
     `Owned ${fragment} query did not reach the operator lock`,
   );
 }
 
-async function queuedLoginRace(action: () => Promise<unknown>): Promise<void> {
+async function queuedLoginRace(
+  action: () => Promise<unknown>,
+  expectedSessions = 0,
+  staleAction?: () => Promise<unknown>,
+): Promise<void> {
   const holder = postgres(process.env.MIGRATION_DATABASE_URL ?? "", { max: 1 });
   let release: () => void = () => undefined,
     acquired: () => void = () => undefined;
@@ -347,7 +354,8 @@ async function queuedLoginRace(action: () => Promise<unknown>): Promise<void> {
   });
   await ready;
   let writer: Promise<unknown> | undefined,
-    login: ReturnType<typeof loginOperator> | undefined;
+    login: ReturnType<typeof loginOperator> | undefined,
+    stale: Promise<unknown> | undefined;
   try {
     writer = action();
     await waitForLock('password_hash as "passwordHash"');
@@ -357,19 +365,27 @@ async function queuedLoginRace(action: () => Promise<unknown>): Promise<void> {
       () => ({ accepted: false }),
     );
     await waitForLock("password_hash,auth_generation");
+    if (staleAction) {
+      stale = staleAction().then(
+        () => ({ accepted: true }),
+        () => ({ accepted: false }),
+      );
+      await waitForLock('password_hash as "passwordHash"', 2);
+    }
     release();
     await transaction;
     await writer;
     expect(await settled).toEqual({ accepted: false });
+    if (stale) expect(await stale).toEqual({ accepted: false });
     expect(
       Number(
         (await getSql()`select count(*) as n from operator_sessions`)[0]?.n,
       ),
-    ).toBe(0);
+    ).toBe(expectedSessions);
   } finally {
     release();
     await transaction;
-    await Promise.allSettled([writer, login]);
+    await Promise.allSettled([writer, login, stale]);
     await holder.end();
   }
 }
@@ -436,10 +452,93 @@ describe("operator account and consumed login concurrency", () => {
     ).toBe(200);
     expect(await validateOperatorSession(second.token)).toBeNull();
   });
+  it("preserves credentials and live sessions on wrong password or a failed session insert", async () => {
+    const input = {
+      currentPassword: account.password,
+      newPassword: "rollback-passphrase-43!",
+      confirmPassword: "rollback-passphrase-43!",
+    };
+    const before =
+      await getSql()`select password_hash,auth_generation from operator`;
+    const clientSessions =
+      await getSql()`select * from client_sessions order by token_hash`;
+    await expect(
+      changePassword(
+        { ...input, currentPassword: "incorrect-passphrase-43!" },
+        token,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_PASSWORD" });
+    const admin = postgres(process.env.MIGRATION_DATABASE_URL ?? "", {
+      max: 1,
+    });
+    try {
+      await admin.unsafe(
+        "create function test_fail_rotation() returns trigger language plpgsql as $$begin raise exception 'synthetic insertion failure'; end$$",
+      );
+      await admin.unsafe(
+        "create trigger test_fail_rotation before insert on operator_sessions for each row execute function test_fail_rotation()",
+      );
+      const response = await passwordPost(request(input, token, "POST"));
+      expect(response.status).toBe(503);
+      expect(response.headers.has("set-cookie")).toBe(false);
+      expect(
+        await getSql()`select password_hash,auth_generation from operator`,
+      ).toEqual(before);
+      expect((await validateOperatorSession(token))?.id).toBe(actor.id);
+      expect(
+        await getSql()`select * from client_sessions order by token_hash`,
+      ).toEqual(clientSessions);
+    } finally {
+      await admin.unsafe(
+        "drop trigger if exists test_fail_rotation on operator_sessions",
+      );
+      await admin.unsafe("drop function if exists test_fail_rotation()");
+      await admin.end();
+    }
+  });
   it("rejects an old-hash login queued after password change and revokes real old tokens", async () => {
     const newPassword = "changed-unique-passphrase-12!";
+    const other = await createOperatorSession(actor.id);
+    let renewed = "";
     try {
-      await queuedLoginRace(() =>
+      await queuedLoginRace(
+        async () => {
+          const response = await passwordPost(
+            request(
+              {
+                currentPassword: account.password,
+                newPassword,
+                confirmPassword: newPassword,
+              },
+              token,
+              "POST",
+            ),
+          );
+          expect(response.status).toBe(200);
+          const body: unknown = await response.json();
+          expect(body).toMatchObject({ data: { saved: true }, error: null });
+          expect(JSON.stringify(body)).not.toMatch(/token|session|password/i);
+          const cookie = response.headers.get("set-cookie") ?? "";
+          expect(cookie).toContain("HttpOnly; SameSite=Lax");
+          expect(cookie).not.toContain("Domain=");
+          renewed = cookie.split(";")[0]?.slice("pylon_session=".length) ?? "";
+          expect(renewed).toMatch(/^[0-9a-f]{64}$/);
+        },
+        1,
+        () =>
+          changePassword(
+            {
+              currentPassword: account.password,
+              newPassword: "stale-change-passphrase-43!",
+              confirmPassword: "stale-change-passphrase-43!",
+            },
+            token,
+          ),
+      );
+      expect(await validateOperatorSession(token)).toBeNull();
+      expect(await validateOperatorSession(other.token)).toBeNull();
+      expect((await validateOperatorSession(renewed))?.id).toBe(actor.id);
+      await expect(
         changePassword(
           {
             currentPassword: account.password,
@@ -448,8 +547,10 @@ describe("operator account and consumed login concurrency", () => {
           },
           token,
         ),
-      );
-      expect(await validateOperatorSession(token)).toBeNull();
+      ).rejects.toMatchObject({ statusCode: 401 });
+      const stored = await getSql()`select token_hash from operator_sessions`;
+      expect(stored).toHaveLength(1);
+      expect(JSON.stringify(stored)).not.toContain(renewed);
       await expect(
         loginOperator({ email: account.email, password: account.password }),
       ).rejects.toMatchObject({ statusCode: 401 });
@@ -556,7 +657,7 @@ describe("bounded accessible appearance and email output", () => {
         }
     }
   });
-  it("derives readable custom surfaces/statuses/focus/actions and rejects unsupported pairs without saving them", async () => {
+  it("accepts all valid surface pairs with advisory guidance and rejects invalid syntax without saving", async () => {
     expect(contrastRatio("#000000", "#ffffff")).toBe(21);
     expect(contrastRatio("#123456", "#123456")).toBe(1);
     expect(
@@ -566,20 +667,35 @@ describe("bounded accessible appearance and email output", () => {
         allowAutomaticUpdates: true,
       }),
     ).toEqual(defaultAppearance);
-    const before = await getBranding();
+    const mixed = {
+      ...defaultAppearance,
+      lightBackground: "#000000",
+      lightSurface: "#ffffff",
+    };
+    expect(appearanceGuidance(mixed)).toEqual([
+      expect.stringContaining("Light background and light surface"),
+    ]);
     expect(
       (
         await writeSettings(
           request({
             section: "appearance",
-            ...defaultAppearance,
-            lightBackground: "#000000",
-            lightSurface: "#ffffff",
+            ...mixed,
           }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(await getBranding()).toMatchObject(mixed);
+    const before = await getBranding();
+    expect(
+      (
+        await writeSettings(
+          request({ section: "appearance", ...mixed, lightSurface: "#12345z" }),
         )
       ).status,
     ).toBe(400);
     expect(await getBranding()).toEqual(before);
+    expect(appearanceGuidance(defaultAppearance)).toEqual([]);
     for (const [background, surface] of [
       ["#e9dfd0", "#fff4e5"],
       ["#17251f", "#243c32"],
@@ -600,6 +716,7 @@ describe("bounded accessible appearance and email output", () => {
         "#ffff00",
         "#365b54",
         "#ff0000",
+        "#7400b3",
       ])
         for (const mode of ["light", "dark"] as const) {
           const output = themePalette(custom, mode, brand);
@@ -629,8 +746,9 @@ describe("bounded accessible appearance and email output", () => {
               expect(contrastRatio(foreground, bg)).toBeGreaterThanOrEqual(4.5);
           for (const bg of [output.canvas, output.surface, output.surfaceMuted])
             expect(contrastRatio(output.border, bg)).toBeGreaterThanOrEqual(3);
+          expect(output.brandFill).toBe(brand);
           expect(
-            contrastRatio(output.actionInk, output.accentInk),
+            contrastRatio(output.actionInk, output.brandFill),
           ).toBeGreaterThanOrEqual(4.5);
           expect(JSON.stringify(appearanceStyle(custom, brand))).toContain(
             background,

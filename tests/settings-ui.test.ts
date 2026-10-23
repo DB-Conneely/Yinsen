@@ -96,6 +96,12 @@ describe("installed independent settings sections", () => {
     ])
       expect(appearance).toContain(`${name} hex`);
     expect(appearance).toContain("Editorial");
+    for (const choice of ["Humanist", "Layered", "Clean", "Chalk", "Charcoal"])
+      expect(appearance).toContain(choice);
+    expect(appearance).toContain('data-preview-theme="light"');
+    expect(appearance).toContain('data-preview-theme="dark"');
+    expect(appearance).toContain("Preview matches saved appearance.");
+    expect(appearance).not.toContain("unsupported pairs");
     const logo = renderToStaticMarkup(
       createElement(LogoSettings, { logoId: branding.logoId }),
     );
@@ -147,6 +153,12 @@ describe("installed independent settings sections", () => {
     ).toContain("Current password");
     expect(renderToStaticMarkup(createElement(PasswordSettings))).toContain(
       "Confirm new password",
+    );
+    expect(renderToStaticMarkup(createElement(PasswordSettings))).toContain(
+      "renew",
+    );
+    expect(renderToStaticMarkup(createElement(PasswordSettings))).not.toContain(
+      "including this browser",
     );
     const sessions = renderToStaticMarkup(
       createElement(OperatorSessionSettings, {

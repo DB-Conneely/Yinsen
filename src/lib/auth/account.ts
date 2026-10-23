@@ -4,7 +4,12 @@ import { getSql } from "../db/client";
 import { AppError } from "../errors";
 import { emailSchema, passwordSchema } from "./validation";
 import { comparePassword, hashPassword } from "./password";
-import { requireOperatorToken, tokenDigest } from "./session";
+import {
+  createOperatorSession,
+  requireOperatorToken,
+  tokenDigest,
+  type Session,
+} from "./session";
 import { consumeLoginAttempt } from "./rate-limit";
 
 type LockedAccount = {
@@ -68,7 +73,7 @@ export async function saveAccount(
 export async function changePassword(
   input: unknown,
   token: string | undefined,
-): Promise<{ saved: true }> {
+): Promise<{ saved: true; session: Session }> {
   const data = z
     .object({
       currentPassword: passwordSchema,
@@ -86,7 +91,10 @@ export async function changePassword(
     const hash = await hashPassword(data.newPassword);
     await sql`update operator set password_hash=${hash},auth_generation=auth_generation+1 where id=${account.id}`;
     await sql`delete from operator_sessions where operator_id=${account.id}`;
-    return { saved: true };
+    return {
+      saved: true,
+      session: await createOperatorSession(account.id, sql),
+    };
   });
 }
 

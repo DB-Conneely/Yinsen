@@ -96,11 +96,25 @@ else if (args.at(-1) === "/app/LICENSE") {
   );
 });
 
+function copyFontLicenses(root: string): void {
+  mkdirSync(join(root, "src/app/fonts"), { recursive: true });
+  for (const name of [
+    "Inter-LICENSE.txt",
+    "SourceSans3-LICENSE.txt",
+    "SourceSerif4-LICENSE.txt",
+  ])
+    copyFileSync(
+      resolve("src/app/fonts", name),
+      join(root, "src/app/fonts", name),
+    );
+}
+
 describe("installed standalone commands", () => {
   it("copies static assets and removes only generated dotenv copies", () => {
     const root = mkdtempSync(join(tmpdir(), "yinsen-packaging-"));
     mkdirSync(join(root, ".next/static"), { recursive: true });
     mkdirSync(join(root, ".next/standalone"), { recursive: true });
+    copyFontLicenses(root);
     writeFileSync(join(root, ".next/static/asset.css"), "body{color:black}");
     writeFileSync(join(root, ".env"), "APP_ORIGIN=http://localhost:3000");
     writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
@@ -121,6 +135,16 @@ describe("installed standalone commands", () => {
       { cwd: root },
     );
     expect(result.status, result.stderr.toString()).toBe(0);
+    for (const name of [
+      "Inter-LICENSE.txt",
+      "SourceSans3-LICENSE.txt",
+      "SourceSerif4-LICENSE.txt",
+    ])
+      expect(
+        readFileSync(
+          join(root, ".next/standalone/.next/static/font-licenses", name),
+        ),
+      ).toEqual(readFileSync(resolve("src/app/fonts", name)));
     expect(
       readFileSync(
         join(root, ".next/standalone/.next/static/asset.css"),
@@ -175,6 +199,7 @@ describe("installed standalone commands", () => {
     const root = mkdtempSync(join(tmpdir(), "yinsen-private-trace-"));
     mkdirSync(join(root, ".next/static"), { recursive: true });
     mkdirSync(join(root, ".next/standalone/data/uploads"), { recursive: true });
+    copyFontLicenses(root);
     mkdirSync(join(root, ".next/standalone/docs"), { recursive: true });
     writeFileSync(join(root, "release.json"), '{"sourceRevision":null}');
     writeFileSync(

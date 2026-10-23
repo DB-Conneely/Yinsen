@@ -29,6 +29,9 @@
   "exclude": [
     "node_modules",
     ".next/standalone",
+    ".local",
+    ".cortex",
+    "docs",
     "cortex-context",
     "graphify-out"
   ]

@@ -66,7 +66,7 @@ export function PasswordSettings(): ReactElement {
       path="/api/account/password"
       method="POST"
       values={(form) => Object.fromEntries(form)}
-      signOut
+      success="Password saved. This browser stays signed in; other operator sessions are signed out."
     >
       <label>
         Current password
@@ -101,7 +101,8 @@ export function PasswordSettings(): ReactElement {
       </div>
       <p className="field-hint">
         Use a unique passphrase of at least 8 characters, up to 72 UTF-8 bytes.
-        Saving signs out every operator session, including this browser.
+        Saving securely renews this browser and signs out other operator
+        sessions.
       </p>
     </SettingsForm>
   );

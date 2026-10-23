@@ -19,6 +19,11 @@ import { register } from "../src/instrumentation";
 import { logger, logFailure } from "../src/lib/logger";
 import { readReleaseIdentity } from "../src/lib/release";
 
+// Next compiles localFont at build time; installed font requests are verified in the browser.
+vi.mock("next/font/local", () => ({
+  default: ({ variable }: { variable: string }) => ({ variable }),
+}));
+
 nextEnv.loadEnvConfig(process.cwd());
 const connection = databaseConnection(
   process.env.MIGRATION_DATABASE_URL ?? "",
@@ -128,7 +133,8 @@ describe("installed PostgreSQL foundation", () => {
 describe("public rendering and safe logs", () => {
   it("renders the installed accessible root shell", () => {
     const html = renderToStaticMarkup(RootLayout({ children: "Portal" }));
-    expect(html).toContain('<html lang="en">');
+    expect(html).toContain('<html lang="en"');
+    expect(html).toContain("--font-source-serif");
     expect(html).toContain("Portal");
   });
   it("sets security headers through the real Next configuration", async () => {

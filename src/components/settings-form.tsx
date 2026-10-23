@@ -61,7 +61,14 @@ export function SettingsForm({
     }
   }
   return (
-    <form onSubmit={(event) => void submit(event)} aria-label={title}>
+    <form
+      onSubmit={(event) => void submit(event)}
+      aria-label={title}
+      onChange={() => {
+        if (state.status !== "pending")
+          setState({ status: "idle", message: "Unsaved changes." });
+      }}
+    >
       <fieldset disabled={state.status === "pending"}>
         {children}
         <div className="settings-save">

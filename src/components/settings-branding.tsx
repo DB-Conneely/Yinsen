@@ -1,11 +1,5 @@
 "use client";
-import {
-  useRef,
-  useState,
-  type ReactElement,
-  type FormEvent,
-  type CSSProperties,
-} from "react";
+import { useRef, useState, type ReactElement, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -13,6 +7,7 @@ import type { Branding } from "../lib/settings";
 import {
   appearanceSchema,
   appearanceStyle,
+  appearanceGuidance,
   palettes,
   type Appearance,
 } from "../lib/appearance";
@@ -72,31 +67,17 @@ export function BrandingSettings({
         </div>
       </div>
       <p className="field-hint">
-        Choose a colour with the swatch, or paste a six-digit hex value. Links
-        and actions use an accessible shade in each theme.
+        Choose a colour with the swatch, or paste a six-digit hex value. Your
+        colour is kept exactly on solid actions in both themes. Link text and
+        focus colours adapt separately for readability.
       </p>
-      {/* CAST: only the validated preview colour enters this CSS custom property. */}
-      <div
-        className="settings-brand-preview appearance-surface"
-        style={
-          {
-            ...appearanceStyle(settings, previewColour),
-            "--brand-colour": previewColour,
-          } as CSSProperties
-        }
-        aria-label="Brand colour preview"
-      >
-        <span className="eyebrow">Colour preview</span>
-        <a
-          className="button"
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Your portal ↗
-        </a>
-        <span className="status-badge">In progress</span>
-      </div>
+      <AppearancePreview
+        appearance={settings}
+        colour={previewColour}
+        name={settings.brandName}
+        welcome={settings.welcomeText}
+        label="Brand colour preview"
+      />
       <div className="form-grid">
         <label>
           Public contact email
@@ -164,7 +145,7 @@ export function AppearanceSettings({
   }
   function preset(mode: "light" | "dark", name: string): void {
     const parsed = z
-      .enum(["warm", "cool", "slate", "midnight"])
+      .enum(["warm", "cool", "chalk", "slate", "midnight", "charcoal"])
       .safeParse(name);
     if (!parsed.success) return;
     const colours = palettes[parsed.data];
@@ -194,8 +175,11 @@ export function AppearanceSettings({
             value={draft.typography}
             onChange={(event) => change("typography", event.target.value)}
           >
-            <option value="editorial">Editorial · serif headings</option>
-            <option value="modern">Modern · sans serif headings</option>
+            <option value="editorial">
+              Editorial · Source Serif 4 + Inter
+            </option>
+            <option value="modern">Modern · Inter</option>
+            <option value="humanist">Humanist · Source Sans 3</option>
           </select>
         </label>
         <label>
@@ -221,6 +205,17 @@ export function AppearanceSettings({
           </select>
         </label>
         <label>
+          Surface finish
+          <select
+            name="finish"
+            value={draft.finish}
+            onChange={(event) => change("finish", event.target.value)}
+          >
+            <option value="clean">Clean</option>
+            <option value="layered">Layered · subtle depth</option>
+          </select>
+        </label>
+        <label>
           Light preset
           <select
             name="lightPalette"
@@ -229,6 +224,7 @@ export function AppearanceSettings({
           >
             <option value="warm">Warm paper</option>
             <option value="cool">Cool white</option>
+            <option value="chalk">Chalk · neutral</option>
           </select>
         </label>
         <label>
@@ -240,6 +236,7 @@ export function AppearanceSettings({
           >
             <option value="slate">Slate</option>
             <option value="midnight">Midnight</option>
+            <option value="charcoal">Charcoal · neutral</option>
           </select>
         </label>
       </div>
@@ -272,34 +269,95 @@ export function AppearanceSettings({
       <p className="field-hint">
         Pick page and card colours for each theme. Presets restore a starting
         pair. Text, actions, borders and status colours are derived for
-        readability; unsupported pairs are rejected without changing your
-        inputs. Preview shows the last valid pair in your current personal
-        theme.
+        readability. Every six-digit hex colour can be saved. Strongly mixed
+        palettes may still have low-contrast details; guidance never blocks
+        saving. Incomplete hex input stays in the field until corrected.
       </p>
-      <div
-        className="appearance-surface settings-preview"
-        style={appearanceStyle(preview, settings.brandColour)}
-        aria-label="Appearance preview"
-      >
-        <p className="eyebrow">Preview · your current personal theme</p>
-        <h2>{settings.brandName}</h2>
-        <p>{settings.welcomeText}</p>
-        <a
-          className="button"
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Open public portal ↗
-        </a>
-        <span className="status-badge">In progress</span>
-      </div>
+      <p className="field-hint" aria-live="polite">
+        {JSON.stringify(draft) ===
+        JSON.stringify(appearanceSchema.parse(settings))
+          ? "Preview matches saved appearance."
+          : "Draft preview · save to apply across your portal."}
+      </p>
+      {appearanceGuidance(preview).map((message) => (
+        <p className="appearance-advisory" key={message}>
+          {message}
+        </p>
+      ))}
+      <AppearancePreview
+        appearance={preview}
+        colour={settings.brandColour}
+        name={settings.brandName}
+        welcome={settings.welcomeText}
+        label="Appearance preview"
+      />
       <p className="field-hint">
         Applies across public, operator and client screens, and future
         invoice/email styling. Use Appearance in the header for your personal
         light, dark or system preference.
       </p>
     </SettingsForm>
+  );
+}
+
+function AppearancePreview({
+  appearance,
+  colour,
+  name,
+  welcome,
+  label,
+}: {
+  appearance: Appearance;
+  colour: string;
+  name: string;
+  welcome: string;
+  label: string;
+}): ReactElement {
+  return (
+    <div className="settings-preview-pair" aria-label={label}>
+      {(["light", "dark"] as const).map((mode) => (
+        <div
+          key={mode}
+          data-preview-theme={mode}
+          className="appearance-surface settings-preview"
+          style={appearanceStyle(appearance, colour)}
+        >
+          <p className="eyebrow">
+            {mode === "light" ? "Light" : "Dark"} · live sample
+          </p>
+          <div className="card settings-preview-work">
+            <span className="status-badge">In progress</span>
+            <h2>{name}</h2>
+            <p>{welcome}</p>
+            <label>
+              Project name
+              <input
+                value="Brand refresh"
+                readOnly
+                aria-label={`${mode} sample project name`}
+              />
+            </label>
+            <div className="settings-preview-actions">
+              <a
+                className="button"
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Your portal ↗
+              </a>
+              <a
+                href="/operator-guide"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Read the guide
+              </a>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
